@@ -2,6 +2,8 @@
 
 A complete full-stack application that enables intelligent conversations with your codebase using advanced Graph Retrieval-Augmented Generation (GraphRAG) and Large Language Models.
 
+https://github.com/user-attachments/assets/0eb92166-cbbe-4b73-abf9-4067d79f20b1
+
 ## 🚀 Features
 
 ### Core Capabilities
