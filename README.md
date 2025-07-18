@@ -12,6 +12,7 @@ https://github.com/user-attachments/assets/0eb92166-cbbe-4b73-abf9-4067d79f20b1
 - **Real-time Chat**: WebSocket-based streaming chat interface
 - **Code Understanding**: Deep AST parsing for functions, classes, and relationships
 - **Multi-language Support**: Python, JavaScript, TypeScript, Java, C++
+- **Upcoming**: AI-powered changelog generation (coming soon!)
 
 ### Technical Architecture
 - **Backend**: FastAPI with Neo4j Graph Database
