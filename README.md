@@ -29,7 +29,7 @@ A complete full-stack application that enables intelligent conversations with yo
 
 ### 1. Clone the Repository
 ```bash
-git clone <repository-url>
+git clone https://github.com/harn1shmodi/CompassChat.git
 cd CompassChat
 ```
 
@@ -54,7 +54,7 @@ VITE_API_URL=http://localhost:8000
 
 ```bash
 # Start Neo4j database
-docker-compose up -d
+docker run --name neo4j -p 7474:7474 -p 7687:7687 -e "NEO4J_AUTH=neo4j/compasschat" neo4j:latest
 
 # Install and start backend
 cd backend
