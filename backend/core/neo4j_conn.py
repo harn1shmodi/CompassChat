@@ -39,7 +39,9 @@ class Neo4jConnection:
                 "CREATE CONSTRAINT file_path_unique IF NOT EXISTS FOR (f:File) REQUIRE f.path IS UNIQUE",
                 "CREATE CONSTRAINT function_id_unique IF NOT EXISTS FOR (fn:Function) REQUIRE fn.id IS UNIQUE",
                 "CREATE CONSTRAINT class_id_unique IF NOT EXISTS FOR (c:Class) REQUIRE c.id IS UNIQUE",
-                "CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS FOR (ch:Chunk) REQUIRE ch.id IS UNIQUE"
+                "CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS FOR (ch:Chunk) REQUIRE ch.id IS UNIQUE",
+                "CREATE CONSTRAINT changelog_id_unique IF NOT EXISTS FOR (cl:Changelog) REQUIRE cl.id IS UNIQUE",
+                "CREATE CONSTRAINT repository_unique IF NOT EXISTS FOR (r:Repository) REQUIRE (r.owner, r.name) IS UNIQUE"
             ]
             
             for constraint in constraints:
@@ -76,6 +78,31 @@ class Neo4jConnection:
                 logger.info("Created full-text index for chunk content")
             except Exception as e:
                 logger.warning(f"Full-text index may already exist: {e}")
+            
+            # Create full-text search index for changelog content
+            changelog_fulltext_index_query = """
+            CREATE FULLTEXT INDEX changelog_content IF NOT EXISTS
+            FOR (cl:Changelog) ON EACH [cl.content, cl.summary]
+            """
+            try:
+                session.run(changelog_fulltext_index_query)
+                logger.info("Created full-text index for changelog content")
+            except Exception as e:
+                logger.warning(f"Changelog full-text index may already exist: {e}")
+            
+            # Create index for changelog version and date
+            changelog_indexes = [
+                "CREATE INDEX changelog_version IF NOT EXISTS FOR (cl:Changelog) ON (cl.version)",
+                "CREATE INDEX changelog_date IF NOT EXISTS FOR (cl:Changelog) ON (cl.date)",
+                "CREATE INDEX changelog_repository IF NOT EXISTS FOR (cl:Changelog) ON (cl.repository_id)"
+            ]
+            
+            for index_query in changelog_indexes:
+                try:
+                    session.run(index_query)
+                    logger.info(f"Created index: {index_query}")
+                except Exception as e:
+                    logger.warning(f"Index may already exist: {e}")
 
 
 # Global connection instance

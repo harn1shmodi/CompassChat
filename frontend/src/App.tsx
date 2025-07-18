@@ -3,6 +3,9 @@ import { RepoInput } from './components/RepoInput';
 import { ChatInterface } from './components/ChatInterface';
 import { Auth } from './components/Auth';
 import { RepoHistory } from './components/RepoHistory';
+import { ChangelogGenerator } from './components/ChangelogGenerator';
+import { ChangelogHistory } from './components/ChangelogHistory';
+import { User as UserIcon, Sun, Moon, MessageCircle, GitBranch, History } from 'lucide-react';
 import './App.css';
 
 interface User {
@@ -19,6 +22,8 @@ interface AnalysisProgress {
   stats?: any;
 }
 
+type TabType = 'chat' | 'changelog' | 'history';
+
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -28,6 +33,7 @@ function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showRepoHistory, setShowRepoHistory] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  const [activeTab, setActiveTab] = useState<TabType>('chat');
 
   // Check for existing session on load
   useEffect(() => {
@@ -194,14 +200,14 @@ function App() {
         </div>
         <div className="top-bar-actions">
           <span className="username-display">
-            👤 {user.username}
+            <UserIcon size={16} /> {user.username}
           </span>
           <button 
             onClick={() => setIsDarkMode(!isDarkMode)}
             className="action-button"
             title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
           >
-            {isDarkMode ? '☀️' : '🌙'}
+            {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
           </button>
           <button onClick={handleLogout} className="action-button">
             Logout
@@ -226,19 +232,58 @@ function App() {
             />
           </div>
         ) : (
-          <div className="chat-container" style={{ 
+          <div className="main-container" style={{ 
             width: '100%', 
             height: '100%', 
             display: 'flex', 
             flexDirection: 'column'
           }}>
-            <ChatInterface 
-              repository={repository}
-              analysisProgress={analysisProgress}
-              isAnalyzing={isAnalyzing}
-              authHeaders={getAuthHeaders}
-              onConnectionStatusChange={setConnectionStatus}
-            />
+            {/* Tab Navigation */}
+            <div className="tab-navigation">
+              <button 
+                className={`tab-button ${activeTab === 'chat' ? 'active' : ''}`}
+                onClick={() => setActiveTab('chat')}
+              >
+                <MessageCircle size={16} /> Chat
+              </button>
+              <button 
+                className={`tab-button ${activeTab === 'changelog' ? 'active' : ''}`}
+                onClick={() => setActiveTab('changelog')}
+              >
+                <GitBranch size={16} /> Generate Changelog
+              </button>
+              <button 
+                className={`tab-button ${activeTab === 'history' ? 'active' : ''}`}
+                onClick={() => setActiveTab('history')}
+              >
+                <History size={16} /> Changelog History
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            <div className="tab-content">
+              {activeTab === 'chat' && (
+                <ChatInterface 
+                  repository={repository}
+                  analysisProgress={analysisProgress}
+                  isAnalyzing={isAnalyzing}
+                  authHeaders={getAuthHeaders}
+                  onConnectionStatusChange={setConnectionStatus}
+                />
+              )}
+              {activeTab === 'changelog' && (
+                <ChangelogGenerator 
+                  repository={repository}
+                  authHeaders={getAuthHeaders}
+                />
+              )}
+              {activeTab === 'history' && (
+                <ChangelogHistory 
+                  repository={repository}
+                  authHeaders={getAuthHeaders}
+                />
+              )}
+            </div>
           </div>
         )}
       </div>

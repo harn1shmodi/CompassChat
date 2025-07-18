@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { History } from 'lucide-react';
 import './RepoInput.css';
 
 interface RepoInputProps {
@@ -70,7 +71,7 @@ export const RepoInput: React.FC<RepoInputProps> = ({ onAnalyze, isAnalyzing, on
               className="history-button"
               title="View previous repositories"
             >
-              📚 View Repository History
+              <History size={16} /> View Repository History
             </button>
           </div>
         )}

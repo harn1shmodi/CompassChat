@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from core.config import settings
 from core.neo4j_conn import neo4j_conn
-from api import repos, chat, auth
+from api import repos, chat, auth, changelog
 import logging
 import uvicorn
 from contextlib import asynccontextmanager
@@ -61,6 +61,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api")
 app.include_router(repos.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
+app.include_router(changelog.router, prefix="/api")
 
 
 @app.get("/")

@@ -3,10 +3,12 @@ from openai import OpenAI
 from core.neo4j_conn import neo4j_conn
 from core.config import settings
 from services.embedding_cache import embedding_cache
+from services.optimized_embedding import optimized_embedding_service
 from typing import List, Dict, Any, Optional
 import logging
 import json
 import os
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -507,7 +509,77 @@ class GraphService:
         pass
     
     def _create_chunk_nodes(self, session, chunks: List[Dict], repo_info: Dict):
-        """Create chunk nodes with embeddings"""
+        """Create chunk nodes with embeddings using optimized batch processing"""
+        if not chunks:
+            return
+        
+        try:
+            # Generate embeddings for all chunks in batches
+            logger.info(f"Generating embeddings for {len(chunks)} chunks using optimized batch processing")
+            
+            # Use async embedding generation
+            loop = asyncio.get_event_loop()
+            chunks_with_embeddings = loop.run_until_complete(
+                optimized_embedding_service.generate_embeddings_for_chunks(chunks)
+            )
+            
+            # Batch database operations
+            self._batch_insert_chunks(session, chunks_with_embeddings)
+            
+        except Exception as e:
+            logger.error(f"Error in optimized chunk processing: {e}")
+            # Fallback to sequential processing
+            self._create_chunk_nodes_sequential(session, chunks, repo_info)
+    
+    def _batch_insert_chunks(self, session, chunks: List[Dict]):
+        """Insert chunks in batches to reduce database overhead"""
+        batch_size = 100
+        
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i:i + batch_size]
+            
+            # Create batch query
+            query = """
+            UNWIND $chunks AS chunk_data
+            MATCH (file:File {path: chunk_data.file_path})
+            MERGE (chunk:Chunk {id: chunk_data.chunk_id})
+            SET chunk.content = chunk_data.content,
+                chunk.summary = chunk_data.summary,
+                chunk.type = chunk_data.type,
+                chunk.name = chunk_data.name,
+                chunk.start_line = chunk_data.start_line,
+                chunk.end_line = chunk_data.end_line,
+                chunk.language = chunk_data.language,
+                chunk.embedding = chunk_data.embedding
+            MERGE (chunk)-[:PART_OF]->(file)
+            """
+            
+            # Prepare batch data
+            batch_data = []
+            for chunk in batch:
+                embedding = chunk.get('embedding')
+                if embedding:  # Only include chunks with embeddings
+                    batch_data.append({
+                        'file_path': chunk['file_path'],
+                        'chunk_id': chunk['id'],
+                        'content': chunk['content'],
+                        'summary': chunk.get('summary', ''),
+                        'type': chunk['type'],
+                        'name': chunk['name'],
+                        'start_line': chunk.get('start_line'),
+                        'end_line': chunk.get('end_line'),
+                        'language': chunk['language'],
+                        'embedding': embedding
+                    })
+            
+            if batch_data:
+                session.run(query, {'chunks': batch_data})
+                logger.info(f"Inserted batch of {len(batch_data)} chunks")
+    
+    def _create_chunk_nodes_sequential(self, session, chunks: List[Dict], repo_info: Dict):
+        """Fallback sequential processing method"""
+        logger.warning("Using fallback sequential processing for chunks")
+        
         for chunk in chunks:
             try:
                 # Generate embedding for chunk content
