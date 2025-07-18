@@ -16,6 +16,7 @@ frontend/dist/
 
 # Database
 neo4j_data/
+backend/compasschat.db
 
 # Temporary files
 /tmp/compass_chat_*
