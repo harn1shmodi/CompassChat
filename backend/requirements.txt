@@ -1,0 +1,30 @@
+fastapi
+uvicorn[standard]
+websockets
+neo4j
+neo4j-graphrag
+tree-sitter
+tree-sitter-language-pack
+llama-index
+llama-index-core
+openai
+GitPython
+python-multipart
+python-dotenv
+aiofiles
+httpx
+pydantic
+pydantic-settings
+# Neo4j GraphRAG (community implementation)
+neo4j-driver
+# Database and authentication
+sqlalchemy
+passlib[bcrypt]
+python-jose[cryptography]
+# Caching
+redis
+# Async HTTP and rate limiting
+aiohttp
+tenacity
+# Performance monitoring
+psutil
