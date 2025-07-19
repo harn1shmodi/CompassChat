@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     redis_db: int = 0
     redis_password: str = "password"
     
-    cors_origins: List[str] = ["*"]
+    cors_origins: List[str] = ["http://localhost:5173", "http://localhost:3000", "https://chat.gitcompass.com", "https://compasschat-5ap43.ondigitalocean.app"]
     debug: bool = False
     
     # Performance optimization settings
