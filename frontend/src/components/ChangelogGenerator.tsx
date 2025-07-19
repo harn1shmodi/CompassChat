@@ -214,8 +214,6 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
     if (!generationStartTime || !isGenerating) return;
     
     const elapsed = Date.now() - generationStartTime;
-    const elapsedMinutes = Math.floor(elapsed / 60000);
-    const elapsedSeconds = Math.floor((elapsed % 60000) / 1000);
     
     // Update progress stages based on elapsed time
     if (elapsed < 30000) {
