@@ -54,7 +54,13 @@ class ProductionSummarizationService:
         
         # Get selection parameters from config
         selection_percentage = getattr(settings, 'selection_percentage', 0.3)
-        max_chunks = int(len(chunks) * selection_percentage)
+        max_chunks_by_percentage = int(len(chunks) * selection_percentage)
+        
+        # Apply hard cap of 200 batches (API calls)
+        max_batch_cap = getattr(settings, 'max_summarization_batches', 200)
+        max_chunks = min(max_chunks_by_percentage, max_batch_cap)
+        
+        logger.info(f"Selection limits: {max_chunks_by_percentage} by percentage (30%), {max_batch_cap} by cap - using {max_chunks}")
         
         # Set up selection criteria
         criteria = SelectionCriteria(

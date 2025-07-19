@@ -107,6 +107,10 @@ function App() {
     setAnalysisProgress(null);
     setRepository(null);
 
+    // Create AbortController for timeout handling
+    const abortController = new AbortController();
+    let timeoutId: number | null = null;
+
     try {
       // Extract repository name from URL
       const repoMatch = url.match(/github\.com\/([^\/]+\/[^\/]+)/);
@@ -115,11 +119,16 @@ function App() {
 
       let isComplete = false;
 
+      timeoutId = window.setTimeout(() => {
+        abortController.abort();
+      }, 900000); // 15 minutes timeout (longer than nginx 10min)
+
       // Start repository analysis with auth headers
       const response = await fetch('/api/repos/analyze', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ url }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
@@ -173,23 +182,39 @@ function App() {
         }
       }
       
+      // Clear timeout on successful completion
+      if (timeoutId) clearTimeout(timeoutId);
+      
       // If we reach here without getting a 'complete' status, the stream ended prematurely
       if (!isComplete) {
+        console.warn('Analysis stream ended without completion signal');
+        // Keep the progress dialog open - don't immediately show error
+        // Let the user see the last progress state and decide to wait or cancel
+        setAnalysisProgress(prev => ({
+          ...prev,
+          status: prev?.status || 'indexing',
+          message: 'Analysis continuing... This may take a few more minutes for large repositories.'
+        }));
+      }
+    } catch (error) {
+      if (timeoutId) clearTimeout(timeoutId);
+      console.error('Error analyzing repository:', error);
+      
+      if (error instanceof Error && error.name === 'AbortError') {
         setIsAnalyzing(false);
         setCurrentAnalyzingRepo('');
         setAnalysisProgress({
           status: 'error',
-          message: 'Analysis stream ended unexpectedly. Please try again.'
+          message: 'Analysis timed out after 15 minutes. Large repositories may require more time.'
+        });
+      } else {
+        setIsAnalyzing(false);
+        setCurrentAnalyzingRepo('');
+        setAnalysisProgress({
+          status: 'error',
+          message: 'Failed to analyze repository. Please try again.'
         });
       }
-    } catch (error) {
-      console.error('Error analyzing repository:', error);
-      setIsAnalyzing(false);
-      setCurrentAnalyzingRepo('');
-      setAnalysisProgress({
-        status: 'error',
-        message: 'Failed to analyze repository. Please try again.'
-      });
     }
   };
 
