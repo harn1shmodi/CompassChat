@@ -6,6 +6,9 @@ from datetime import datetime, timedelta
 import hashlib
 import secrets
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
@@ -74,7 +77,12 @@ class DatabaseManager:
         if not database_url:
             database_url = os.getenv("DATABASE_URL", "sqlite:///./compasschat.db")
         
-        self.engine = create_engine(database_url)
+        # Handle Supabase SSL requirements
+        connect_args = {}
+        if database_url.startswith("postgresql://"):
+            connect_args = {"sslmode": "require"}
+        
+        self.engine = create_engine(database_url, connect_args=connect_args)
         Base.metadata.create_all(bind=self.engine)
     
     def get_session(self) -> Session:

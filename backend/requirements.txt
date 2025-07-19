@@ -19,6 +19,7 @@ pydantic-settings
 neo4j-driver
 # Database and authentication
 sqlalchemy
+psycopg2-binary
 passlib[bcrypt]
 python-jose[cryptography]
 # Caching
