@@ -94,7 +94,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const connectWebSocket = () => {
     try {
       setConnectionStatus('connecting');
-      const wsUrl = `ws://localhost:8000/api/chat/ws`;
+      const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/chat/ws`;
       const websocket = new WebSocket(wsUrl);
 
       websocket.onopen = () => {
