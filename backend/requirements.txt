@@ -13,7 +13,7 @@ python-multipart
 python-dotenv
 aiofiles
 httpx
-pydantic
+pydantic[email]
 pydantic-settings
 # Neo4j GraphRAG (community implementation)
 neo4j-driver
