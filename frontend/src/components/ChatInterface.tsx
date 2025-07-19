@@ -369,15 +369,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             disabled={!inputMessage.trim() || isLoading || isAnalyzing || connectionStatus !== 'connected'}
             className="send-button"
           >
-            {isLoading ? (
-              <div className="loading-spinner">
-                <div className="spinner-dot"></div>
-                <div className="spinner-dot"></div>
-                <div className="spinner-dot"></div>
-              </div>
-            ) : (
-              '➤'
-            )}
+            ➤
           </button>
         </div>
       </div>

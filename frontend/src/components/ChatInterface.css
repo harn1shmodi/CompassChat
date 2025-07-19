@@ -285,7 +285,7 @@
   cursor: not-allowed;
 }
 
-.loading-spinner {
+/* .loading-spinner {
   display: flex;
   align-items: center;
   justify-content: center;
