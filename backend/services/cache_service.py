@@ -21,12 +21,14 @@ class CacheService:
     def is_repository_cached(self, repo_url: str, commit_hash: str = None) -> bool:
         """Check if repository analysis is cached and valid"""
         try:
+            print(f"Checking cache for repository: {repo_url} (commit: {commit_hash})")
             repo_cache = db_manager.get_or_create_repository_cache(
                 repo_url=repo_url,
                 repo_name=self._extract_repo_name(repo_url),
                 commit_hash=commit_hash,
                 is_public=True
             )
+            print(f"Cache entry: {repo_cache}")
             
             # Check if analysis exists in Neo4j
             if self.graph_service.repository_exists(repo_cache.repo_name):
