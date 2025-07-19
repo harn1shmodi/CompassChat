@@ -10,7 +10,13 @@ import {
   FileText,
   Edit,
   Save,
-  X
+  X,
+  Rocket,
+  Search,
+  Sparkles,
+  CheckCircle,
+  XCircle,
+  RotateCcw
 } from 'lucide-react';
 import './ChangelogGenerator.css';
 
@@ -58,7 +64,7 @@ interface ChangelogGeneratorProps {
 }
 
 interface GenerationProgress {
-  status: 'starting' | 'cloning' | 'analyzing' | 'generating' | 'complete' | 'error';
+  status: 'starting' | 'analyzing' | 'generating' | 'complete' | 'error';
   message: string;
   progress?: number;
   estimated_time?: string;
@@ -148,7 +154,7 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
         updateProgressEstimate();
       }, 2000);
 
-      setGenerationProgress({ status: 'cloning', message: 'Cloning repository...' });
+      setGenerationProgress({ status: 'analyzing', message: 'Analyzing repository and commit history...' });
       
       const response = fetchWithAuth 
         ? await fetchWithAuth(endpoint, {
@@ -195,7 +201,7 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
         // Start polling for completion
         startPollingForCompletion();
       } else {
-        const errorMessage = 'An error occurred while generating the changelog';
+        const errorMessage = 'Network error occurred. The server may still be processing your request. Please check the \"Changelog History\" tab in a few minutes to see if your changelog was created.';
         setError(errorMessage);
         setGenerationProgress({ status: 'error', message: errorMessage });
       }
@@ -216,9 +222,7 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
     const elapsed = Date.now() - generationStartTime;
     
     // Update progress stages based on elapsed time
-    if (elapsed < 30000) {
-      setGenerationProgress(prev => prev ? { ...prev, status: 'cloning', message: 'Cloning repository...' } : null);
-    } else if (elapsed < 120000) {
+    if (elapsed < 60000) {
       setGenerationProgress(prev => prev ? { ...prev, status: 'analyzing', message: 'Analyzing code changes and commit history...' } : null);
     } else {
       setGenerationProgress(prev => prev ? { ...prev, status: 'generating', message: 'Generating changelog content with AI...' } : null);
@@ -297,8 +301,8 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
         pollCount++;
         if (pollCount >= maxPolls) {
           // Polling timeout
-          setError('Server is taking longer than expected. Please check the changelog history tab in a few minutes.');
-          setGenerationProgress({ status: 'error', message: 'Polling timed out. Check changelog history later.' });
+          setError('Generation is taking longer than expected. Your changelog may still be processing in the background. Please check the "Changelog History" tab in a few minutes.');
+          setGenerationProgress({ status: 'error', message: 'Still processing. Check changelog history tab later.' });
           setIsPolling(false);
         } else {
           // Continue polling
@@ -309,8 +313,8 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
         console.error('Polling error:', error);
         pollCount++;
         if (pollCount >= maxPolls) {
-          setError('Unable to check completion status. Please check the changelog history tab.');
-          setGenerationProgress({ status: 'error', message: 'Unable to verify completion.' });
+          setError('Unable to verify completion status. Your changelog may have been generated successfully. Please check the "Changelog History" tab.');
+          setGenerationProgress({ status: 'error', message: 'Check changelog history tab for your generated changelog.' });
           setIsPolling(false);
         } else {
           setTimeout(poll, pollInterval);
@@ -561,9 +565,8 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
                       <div 
                         className={`progress-fill progress-${generationProgress.status}`}
                         style={{
-                          width: generationProgress.status === 'starting' ? '10%' :
-                                 generationProgress.status === 'cloning' ? '25%' :
-                                 generationProgress.status === 'analyzing' ? '60%' :
+                          width: generationProgress.status === 'starting' ? '15%' :
+                                 generationProgress.status === 'analyzing' ? '50%' :
                                  generationProgress.status === 'generating' ? '85%' :
                                  generationProgress.status === 'complete' ? '100%' : '0%'
                         }}
@@ -573,12 +576,11 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
                   
                   <div className="progress-status">
                     <span className="status-icon">
-                      {generationProgress.status === 'starting' && '🚀'}
-                      {generationProgress.status === 'cloning' && '📥'}
-                      {generationProgress.status === 'analyzing' && '🔍'}
-                      {generationProgress.status === 'generating' && (isPolling ? '🔄' : '✨')}
-                      {generationProgress.status === 'complete' && '✅'}
-                      {generationProgress.status === 'error' && '❌'}
+                      {generationProgress.status === 'starting' && <Rocket size={18} />}
+                      {generationProgress.status === 'analyzing' && <Search size={18} />}
+                      {generationProgress.status === 'generating' && (isPolling ? <RotateCcw size={18} className="animate-spin" /> : <Sparkles size={18} />)}
+                      {generationProgress.status === 'complete' && <CheckCircle size={18} />}
+                      {generationProgress.status === 'error' && <XCircle size={18} />}
                     </span>
                     <span className="status-message">{generationProgress.message}</span>
                     {isPolling && (
@@ -590,11 +592,11 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
 
                   {generationProgress.status === 'error' && !isPolling && (
                     <div className="progress-error">
-                      <p>The server may still be working on your request in the background. You can:</p>
+                      <p>The server may still be processing your request. Here's what you can do:</p>
                       <ul>
-                        <li>Wait a few more minutes and try refreshing the page</li>
-                        <li>Check the changelog history tab later</li>
-                        <li>Try again with a smaller date range</li>
+                        <li><strong>Check the "Changelog History" tab</strong> - Your changelog may have been generated successfully</li>
+                        <li>Wait 2-3 minutes and refresh the history tab</li>
+                        <li>If not found, try again with a smaller date range or fewer commits</li>
                       </ul>
                     </div>
                   )}

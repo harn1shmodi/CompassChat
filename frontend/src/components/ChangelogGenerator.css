@@ -90,8 +90,8 @@
 .changelog-header h2 {
   margin: 0 0 0.5rem 0;
   color: hsl(var(--foreground));
-  font-size: 1.75rem;
-  font-weight: 700;
+  font-size: 1.5rem;
+  font-weight: 600;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -749,7 +749,7 @@
 }
 
 .progress-analyzing {
-  background: linear-gradient(90deg, hsl(220, 70%, 50%), hsl(220, 70%, 60%));
+  background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / 0.8));
 }
 
 .progress-generating {
@@ -871,5 +871,19 @@
   }
   50% {
     opacity: 0.5;
+  }
+}
+
+/* Spin animation for icons */
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }

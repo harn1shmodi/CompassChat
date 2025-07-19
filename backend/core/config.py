@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     neo4j_password: str = os.getenv("NEO4J_PASSWORD", "password")
     neo4j_database: str = os.getenv("NEO4J_DATABASE", "neo4j")
 
+    # Database configuration
+    database_url: str = os.getenv("DATABASE_URL", "sqlite:///./compasschat.db")
+
     openai_api_key: str = os.getenv("OPENAI_API_KEY")
 
     # AI Provider Selection
@@ -61,6 +64,7 @@ class Settings(BaseSettings):
     
     class Config:
         env_file = ".env"
+        extra = "ignore"  # Allow extra environment variables without errors
 
 
 settings = Settings()

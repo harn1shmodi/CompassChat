@@ -271,7 +271,7 @@ export const ChangelogHistory: React.FC<ChangelogHistoryProps> = ({
         {loading ? (
           <div className="loading-state">
             <div className="loading-spinner">
-              <Loader2 size={40} className="animate-spin" />
+              <Loader2 size={32} className="animate-spin" />
               <p>Loading changelog history...</p>
             </div>
           </div>

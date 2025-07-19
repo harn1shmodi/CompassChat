@@ -77,7 +77,7 @@
 
 .changelog-history-header h2 {
   margin: 0 0 0.5rem 0;
-  color: hsl(var(--primary));
+  color: hsl(var(--foreground));
   font-size: 1.5rem;
   font-weight: 600;
   transition: color 0.3s ease;
@@ -138,7 +138,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 400px;
+  min-height: 200px;
+  padding: 2rem;
   animation: fadeIn 0.5s ease-out;
   position: relative;
 }
@@ -153,7 +154,8 @@
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius);
-  padding: 3rem 2rem;
+  padding: 2rem 1.5rem;
+  max-width: 300px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   animation: pulseScale 2s ease-in-out infinite;
 }
@@ -169,24 +171,12 @@
   }
 }
 
-.spinner {
-  border: 3px solid hsl(var(--border));
-  border-top: 3px solid hsl(var(--primary));
-  border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 1rem;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
+/* Spinner styles moved to Lucid icons with animate-spin class */
 
 .loading-spinner p {
   color: hsl(var(--muted-foreground));
   font-size: 0.875rem;
+  margin: 1rem 0 0 0;
   animation: pulse 2s infinite;
 }
 

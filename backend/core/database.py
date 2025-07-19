@@ -75,7 +75,9 @@ class UserRepositoryAnalysis(Base):
 class DatabaseManager:
     def __init__(self, database_url: str = None):
         if not database_url:
-            database_url = os.getenv("DATABASE_URL", "sqlite:///./compasschat.db")
+            # Import here to avoid circular imports
+            from core.config import settings
+            database_url = settings.database_url
         
         logger.info(f"Initializing database with URL type: {'PostgreSQL' if database_url.startswith('postgresql://') else 'SQLite'}")
         
