@@ -77,13 +77,32 @@ class DatabaseManager:
         if not database_url:
             database_url = os.getenv("DATABASE_URL", "sqlite:///./compasschat.db")
         
+        # Handle missing psycopg2 gracefully
+        if database_url.startswith("postgresql://"):
+            try:
+                import psycopg2
+            except ImportError:
+                logger.error("psycopg2 not installed but PostgreSQL URL provided. Falling back to SQLite.")
+                database_url = "sqlite:///./compasschat.db"
+        
         # Handle Supabase SSL requirements
         connect_args = {}
         if database_url.startswith("postgresql://"):
             connect_args = {"sslmode": "require"}
         
-        self.engine = create_engine(database_url, connect_args=connect_args)
-        Base.metadata.create_all(bind=self.engine)
+        try:
+            self.engine = create_engine(database_url, connect_args=connect_args)
+            Base.metadata.create_all(bind=self.engine)
+            logger.info(f"Database connected successfully to: {database_url.split('@')[0]}@***")
+        except Exception as e:
+            logger.error(f"Database connection failed: {e}")
+            # Fallback to SQLite if PostgreSQL fails
+            if database_url.startswith("postgresql://"):
+                logger.info("Falling back to SQLite database")
+                self.engine = create_engine("sqlite:///./compasschat.db")
+                Base.metadata.create_all(bind=self.engine)
+            else:
+                raise
     
     def get_session(self) -> Session:
         from sqlalchemy.orm import sessionmaker
