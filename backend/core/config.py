@@ -1,15 +1,19 @@
 from pydantic_settings import BaseSettings
 from typing import List
+import os
+from dotenv import load_dotenv
 
+load_dotenv()
 
 class Settings(BaseSettings):
-    neo4j_uri: str = "bolt://localhost:7687"
-    neo4j_user: str = "neo4j"
-    neo4j_password: str = "password"
-    neo4j_database: str = "neo4j"
-    
-    openai_api_key: str
-    
+    #use load env variables for sensitive data
+    neo4j_uri: str = os.getenv("NEO4J_URI", "bolt://localhost:7687")
+    neo4j_user: str = os.getenv("NEO4J_USER", "neo4j")
+    neo4j_password: str = os.getenv("NEO4J_PASSWORD", "password")
+    neo4j_database: str = os.getenv("NEO4J_DATABASE", "neo4j")
+
+    openai_api_key: str = os.getenv("OPENAI_API_KEY")
+
     # AI Provider Selection
     ai_provider: str = "openai"  # Options: openai, gemini
     gemini_api_key: str = ""
@@ -29,7 +33,7 @@ class Settings(BaseSettings):
     redis_db: int = 0
     redis_password: str = "password"
     
-    cors_origins: List[str] = ["http://localhost:5173", "http://localhost:3000"]
+    cors_origins: List[str] = ["*"]
     debug: bool = False
     
     # Performance optimization settings
