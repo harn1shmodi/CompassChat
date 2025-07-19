@@ -144,8 +144,8 @@ async def analyze_repository(
                 
                 graph_service.upsert_repository_data(repo_info, summarized_chunks, parsed_files, user_id=current_user.username)
                 
-                # Get final stats
-                stats = graph_service.get_repository_stats(repo_info['name'], repo_info['owner'])
+                # Get final stats with user isolation
+                stats = graph_service.get_repository_stats(repo_info['name'], repo_info['owner'], user_id=current_user.username)
                 
                 # Update cache with analysis results
                 cache_service.update_repository_cache(
@@ -238,7 +238,7 @@ async def get_repository_stats(owner: str, name: str, current_user: User = Depen
                 detail="You don't have access to this repository"
             )
         
-        stats = graph_service.get_repository_stats(name, owner)
+        stats = graph_service.get_repository_stats(name, owner, user_id=current_user.username)
         
         if stats['files'] == 0:
             raise HTTPException(status_code=404, detail="Repository not found or not analyzed")
