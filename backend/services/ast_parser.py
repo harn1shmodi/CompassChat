@@ -41,7 +41,13 @@ class ASTParser:
         try:
             path = Path(file_path)
             extension = path.suffix.lower()
+            file_name = path.name
             
+            # Skip documentation files - they will be handled by documentation parser
+            if extension in ['.md', '.json', '.txt', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf']:
+                logger.debug(f"Skipping documentation file: {file_name}")
+                return None
+                
             if extension not in self.parsers:
                 logger.debug(f"No parser available for {extension}")
                 return None

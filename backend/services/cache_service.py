@@ -179,12 +179,10 @@ class CacheService:
             session = db_manager.get_session()
             try:
                 # Query repositories the user has access to
-                # Query repositories the user has access to
                 user_repos = session.query(RepositoryCache).join(
                     RepositoryCache.user_analyses
                 ).filter(
                     RepositoryCache.user_analyses.any(user_id=user.id)
-                    # Remove the chunk filter to show all repositories, even incomplete ones
                 ).order_by(
                     RepositoryCache.analysis_completed_at.desc()
                 ).all()
@@ -193,38 +191,11 @@ class CacheService:
                 for repo in user_repos:
                     logger.info(f"  - {repo.repo_name}: {repo.total_files} files, {repo.total_chunks} chunks")
                 
-                # If no user-specific repositories found, check if this is an old user
-                # and provide access to all public repositories as a fallback
+                # If no user-specific repositories found, return empty list
+                # This enforces user isolation - new users won't see existing repositories
                 if not user_repos:
-                    logger.info(f"No user-specific repositories found for {user.username}, checking for public repos")
-                    
-                    # Get all public repositories that have been analyzed
-                    public_repos = session.query(RepositoryCache).filter(
-                        RepositoryCache.is_public == True
-                        # Removed chunk filter here too
-                    ).order_by(
-                        RepositoryCache.analysis_completed_at.desc()
-                    ).all()
-                    
-                    if public_repos:
-                        logger.info(f"Found {len(public_repos)} public repositories, granting access to user {user.username}")
-                        
-                        # Automatically grant access to all public repositories for this user
-                        for repo in public_repos:
-                            try:
-                                db_manager.grant_user_access_to_repository(user.id, repo.id)
-                            except Exception as e:
-                                logger.warning(f"Failed to grant access to repo {repo.repo_name}: {e}")
-                        
-                        # Re-query to get the updated list
-                        user_repos = session.query(RepositoryCache).join(
-                            RepositoryCache.user_analyses
-                        ).filter(
-                            RepositoryCache.user_analyses.any(user_id=user.id)
-                            # Removed chunk filter here as well
-                        ).order_by(
-                            RepositoryCache.analysis_completed_at.desc()
-                        ).all()
+                    logger.info(f"No repositories found for user {user.username}")
+                    return []
                 
                 return [
                     {
@@ -236,7 +207,7 @@ class CacheService:
                         "total_chunks": repo.total_chunks,
                         "total_functions": repo.total_functions,
                         "total_classes": repo.total_classes,
-                        "status": "complete" if repo.total_chunks > 0 else "incomplete"  # Add status indicator
+                        "status": "complete" if repo.total_chunks > 0 else "incomplete"
                     }
                     for repo in user_repos
                 ]

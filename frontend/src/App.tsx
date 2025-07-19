@@ -5,6 +5,7 @@ import { Auth } from './components/Auth';
 import { RepoHistory } from './components/RepoHistory';
 import { ChangelogGenerator } from './components/ChangelogGenerator';
 import { ChangelogHistory } from './components/ChangelogHistory';
+import { ProgressDialog } from './components/ProgressDialog';
 import { User as UserIcon, Sun, Moon, MessageCircle, GitBranch, History } from 'lucide-react';
 import './App.css';
 
@@ -34,6 +35,7 @@ function App() {
   const [showRepoHistory, setShowRepoHistory] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
   const [activeTab, setActiveTab] = useState<TabType>('chat');
+  const [currentAnalyzingRepo, setCurrentAnalyzingRepo] = useState<string>('');
 
   // Check for existing session on load
   useEffect(() => {
@@ -94,6 +96,12 @@ function App() {
     ...(sessionToken && { 'Authorization': `Bearer ${sessionToken}` }),
   });
 
+  const handleCancelAnalysis = () => {
+    setIsAnalyzing(false);
+    setAnalysisProgress(null);
+    setCurrentAnalyzingRepo('');
+  };
+
   const handleAnalyzeRepository = async (url: string) => {
     setIsAnalyzing(true);
     setAnalysisProgress(null);
@@ -103,6 +111,10 @@ function App() {
       // Extract repository name from URL
       const repoMatch = url.match(/github\.com\/([^\/]+\/[^\/]+)/);
       const repoName = repoMatch ? repoMatch[1] : url;
+      setCurrentAnalyzingRepo(repoName);
+
+      let lastStatus = '';
+      let isComplete = false;
 
       // Start repository analysis with auth headers
       const response = await fetch('/api/repos/analyze', {
@@ -129,7 +141,9 @@ function App() {
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         
@@ -142,13 +156,17 @@ function App() {
             try {
               const data = JSON.parse(line.slice(6));
               setAnalysisProgress(data);
+              lastStatus = data.status;
 
               if (data.status === 'complete') {
+                isComplete = true;
                 setRepository(repoName);
                 setIsAnalyzing(false);
+                setCurrentAnalyzingRepo('');
               } else if (data.status === 'error') {
                 console.error('Analysis error:', data.message);
                 setIsAnalyzing(false);
+                setCurrentAnalyzingRepo('');
               }
             } catch (error) {
               console.error('Error parsing SSE data:', error);
@@ -156,9 +174,20 @@ function App() {
           }
         }
       }
+      
+      // If we reach here without getting a 'complete' status, the stream ended prematurely
+      if (!isComplete) {
+        setIsAnalyzing(false);
+        setCurrentAnalyzingRepo('');
+        setAnalysisProgress({
+          status: 'error',
+          message: 'Analysis stream ended unexpectedly. Please try again.'
+        });
+      }
     } catch (error) {
       console.error('Error analyzing repository:', error);
       setIsAnalyzing(false);
+      setCurrentAnalyzingRepo('');
       setAnalysisProgress({
         status: 'error',
         message: 'Failed to analyze repository. Please try again.'
@@ -297,6 +326,14 @@ function App() {
         />
       )}
       
+      {/* Progress Dialog */}
+      <ProgressDialog
+        isOpen={isAnalyzing && currentAnalyzingRepo !== ''}
+        repository={currentAnalyzingRepo}
+        progress={analysisProgress}
+        onCancel={handleCancelAnalysis}
+      />
+      
       {analysisProgress && analysisProgress.status === 'error' && (
         <div className="error-overlay">
           <div className="error-dialog">
@@ -307,6 +344,7 @@ function App() {
                 setAnalysisProgress(null);
                 setRepository(null);
                 setIsAnalyzing(false);
+                setCurrentAnalyzingRepo('');
               }}
               className="error-close-button"
             >

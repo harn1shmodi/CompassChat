@@ -2,6 +2,8 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 from services.git_analysis import GitAnalysisService
 from services.graph_service import GraphService
+from services.github_clone import GitHubCloner
+from services.ai_provider import ai_provider
 from core.config import settings
 from core.neo4j_conn import neo4j_conn
 from openai import OpenAI
@@ -9,6 +11,8 @@ import logging
 import json
 import re
 import uuid
+import tempfile
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +23,7 @@ class ChangelogService:
     def __init__(self):
         self.git_service = GitAnalysisService()
         self.graph_service = GraphService()
+        self.github_cloner = GitHubCloner()
         self.openai_client = OpenAI(api_key=settings.openai_api_key)
     
     async def generate_changelog(self, 
@@ -198,18 +203,13 @@ class ChangelogService:
             # Get audience-specific prompt
             system_prompt = self._get_audience_prompt(target_audience, changelog_format)
             
-            # Generate changelog using OpenAI
-            response = self.openai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": context}
-                ],
-                max_tokens=1500,
-                temperature=0.2
-            )
+            # Generate changelog using AI provider
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": context}
+            ]
             
-            return response.choices[0].message.content
+            return ai_provider.generate_chat_completion(messages, max_tokens=1500, temperature=0.2)
         except Exception as e:
             logger.error(f"Error generating changelog content: {e}")
             return "Error generating changelog content"
@@ -261,49 +261,56 @@ class ChangelogService:
         
         Your task is to transform the provided commit information into a clear, well-organized changelog entry.
         
+        IMPORTANT: Create a changelog that is specific to the actual code changes in the commits. Do NOT use generic placeholders or vague statements.
+        
         Guidelines:
         - Focus on what matters most to {target_audience}
         - Use clear, concise language
         - Group related changes together
         - Highlight breaking changes prominently
         - Include relevant technical details where appropriate
+        - Be specific about what functionality was added, changed, or fixed
+        - Use actual file names, function names, and features from the commits
+        - Do NOT use generic phrases like "comprehensive codebase" or "well-structured architecture"
         """
         
         audience_prompts = {
             "users": """
             Focus on:
-            - New features and how they benefit users
-            - Bug fixes that improve user experience
-            - UI/UX improvements
-            - Performance improvements users will notice
-            - Avoid overly technical jargon
+            - New features and how they benefit users (based on actual commits)
+            - Bug fixes that improve user experience (mention specific issues fixed)
+            - UI/UX improvements (reference actual UI components or files changed)
+            - Performance improvements users will notice (specify what got faster)
+            - Avoid overly technical jargon but be specific about features
             - Explain the impact of changes in user-friendly terms
+            - Use actual feature names and functionality from the commits
             """,
             "developers": """
             Focus on:
-            - API changes and new endpoints
-            - Breaking changes with migration notes
-            - New developer tools and utilities
-            - Performance improvements with metrics
-            - Dependencies and library updates
-            - Technical debt improvements
-            - Include code examples where relevant
+            - API changes and new endpoints (reference actual endpoints from commits)
+            - Breaking changes with migration notes (specify what changed)
+            - New developer tools and utilities (mention actual tools added)
+            - Performance improvements with context (specify what was optimized)
+            - Dependencies and library updates (list actual dependencies)
+            - Technical debt improvements (reference actual refactoring)
+            - Include actual function/class names and file paths where relevant
             """,
             "business": """
             Focus on:
-            - Features that drive business value
-            - Customer-requested improvements
-            - Market competitive advantages
-            - Revenue-impacting changes
-            - Cost savings and efficiency improvements
-            - Risk mitigation and security enhancements
+            - Features that drive business value (based on actual feature commits)
+            - Customer-requested improvements (reference actual functionality)
+            - Market competitive advantages (mention specific capabilities)
+            - Revenue-impacting changes (specify what business features were added)
+            - Cost savings and efficiency improvements (reference actual optimizations)
+            - Risk mitigation and security enhancements (mention specific security fixes)
             """,
             "mixed": """
             Focus on:
-            - Balance between technical and user-facing changes
-            - Categorize changes by their impact area
+            - Balance between technical and user-facing changes (based on actual commits)
+            - Categorize changes by their impact area using actual commit information
             - Use clear headings to separate concerns
-            - Include both user benefits and technical details
+            - Include both user benefits and technical details from real changes
+            - Be specific about what was actually implemented, not generic descriptions
             """
         }
         
@@ -518,23 +525,36 @@ class ChangelogService:
                 "metadata": {}
             }
     
-    def get_changelog_history(self, repo_owner: str, repo_name: str) -> List[Dict[str, Any]]:
-        """Get changelog history for a repository"""
+    def get_changelog_history(self, repo_owner: str, repo_name: str, user_id: str = None) -> List[Dict[str, Any]]:
+        """Get changelog history for a repository with user isolation"""
         try:
             with neo4j_conn.get_session() as session:
-                query = """
-                MATCH (repo:Repository {owner: $repo_owner, name: $repo_name})-[:HAS_CHANGELOG]->(cl:Changelog)
-                RETURN cl.id as id, cl.version as version, cl.date as date, cl.content as content,
-                       cl.target_audience as target_audience, cl.format as format,
-                       cl.commits_analyzed as commits_analyzed, cl.breaking_changes as breaking_changes,
-                       cl.commit_types as commit_types, cl.contributors as contributors,
-                       cl.summary as summary
-                ORDER BY cl.date DESC
-                """
+                if user_id:
+                    query = """
+                    MATCH (repo:Repository {owner: $repo_owner, name: $repo_name, user_id: $user_id})-[:HAS_CHANGELOG]->(cl:Changelog)
+                    RETURN cl.id as id, cl.version as version, cl.date as date, cl.content as content,
+                           cl.target_audience as target_audience, cl.format as format,
+                           cl.commits_analyzed as commits_analyzed, cl.breaking_changes as breaking_changes,
+                           cl.commit_types as commit_types, cl.contributors as contributors,
+                           cl.summary as summary, cl.is_published as is_published
+                    ORDER BY cl.date DESC
+                    """
+                else:
+                    query = """
+                    MATCH (repo:Repository {owner: $repo_owner, name: $repo_name})-[:HAS_CHANGELOG]->(cl:Changelog)
+                    WHERE cl.is_published = true
+                    RETURN cl.id as id, cl.version as version, cl.date as date, cl.content as content,
+                           cl.target_audience as target_audience, cl.format as format,
+                           cl.commits_analyzed as commits_analyzed, cl.breaking_changes as breaking_changes,
+                           cl.commit_types as commit_types, cl.contributors as contributors,
+                           cl.summary as summary, cl.is_published as is_published
+                    ORDER BY cl.date DESC
+                    """
                 
                 results = session.run(query, {
                     'repo_owner': repo_owner,
-                    'repo_name': repo_name
+                    'repo_name': repo_name,
+                    'user_id': user_id
                 })
                 
                 changelog_entries = []
@@ -547,6 +567,7 @@ class ChangelogService:
                         'target_audience': record['target_audience'],
                         'format': record['format'],
                         'summary': record['summary'],
+                        'is_published': record['is_published'] if record['is_published'] is not None else False,
                         'metadata': {
                             'commits_analyzed': record['commits_analyzed'],
                             'breaking_changes': json.loads(record['breaking_changes']) if record['breaking_changes'] else [],
@@ -561,24 +582,25 @@ class ChangelogService:
             logger.error(f"Error getting changelog history: {e}")
             return []
     
-    def store_changelog(self, repo_owner: str, repo_name: str, changelog_data: Dict[str, Any]) -> bool:
+    def store_changelog(self, repo_owner: str, repo_name: str, changelog_data: Dict[str, Any], user_id: str) -> bool:
         """Store changelog entry in the database"""
         try:
             with neo4j_conn.get_session() as session:
-                # First, ensure the repository exists
+                # First, ensure the repository exists with user ownership
                 repo_query = """
-                MERGE (repo:Repository {owner: $repo_owner, name: $repo_name})
+                MERGE (repo:Repository {owner: $repo_owner, name: $repo_name, user_id: $user_id})
                 RETURN repo
                 """
                 session.run(repo_query, {
                     'repo_owner': repo_owner,
-                    'repo_name': repo_name
+                    'repo_name': repo_name,
+                    'user_id': user_id
                 })
                 
                 # Create changelog entry
                 changelog_id = str(uuid.uuid4())
                 changelog_query = """
-                MATCH (repo:Repository {owner: $repo_owner, name: $repo_name})
+                MATCH (repo:Repository {owner: $repo_owner, name: $repo_name, user_id: $user_id})
                 CREATE (cl:Changelog {
                     id: $changelog_id,
                     version: $version,
@@ -592,6 +614,7 @@ class ChangelogService:
                     contributors: $contributors,
                     summary: $summary,
                     repository_id: $repository_id,
+                    is_published: $is_published,
                     created_at: datetime()
                 })
                 CREATE (repo)-[:HAS_CHANGELOG]->(cl)
@@ -614,7 +637,9 @@ class ChangelogService:
                     'commit_types': json.dumps(metadata.get('commit_types', {})),
                     'contributors': json.dumps(metadata.get('contributors', [])),
                     'summary': self._generate_summary(changelog_data.get('content', '')),
-                    'repository_id': f"{repo_owner}/{repo_name}"
+                    'repository_id': f"{repo_owner}/{repo_name}",
+                    'is_published': False,
+                    'user_id': user_id
                 })
                 
                 result.single()  # Ensure the query executed successfully
@@ -679,8 +704,40 @@ class ChangelogService:
             logger.error(f"Error deleting changelog: {e}")
             return False
     
+    def publish_changelog(self, repo_owner: str, repo_name: str, version: str, user_id: str) -> bool:
+        """Publish a specific changelog version to make it publicly accessible"""
+        try:
+            with neo4j_conn.get_session() as session:
+                query = """
+                MATCH (repo:Repository {owner: $repo_owner, name: $repo_name, user_id: $user_id})-[:HAS_CHANGELOG]->(cl:Changelog {version: $version})
+                SET cl.is_published = true, cl.published_at = datetime()
+                RETURN cl.id as id
+                """
+                
+                result = session.run(query, {
+                    'repo_owner': repo_owner,
+                    'repo_name': repo_name,
+                    'version': version,
+                    'user_id': user_id
+                })
+                
+                record = result.single()
+                success = record is not None
+                
+                if success:
+                    logger.info(f"Published changelog {version} for {repo_owner}/{repo_name}")
+                else:
+                    logger.warning(f"Changelog {version} not found for {repo_owner}/{repo_name}")
+                
+                return success
+                
+        except Exception as e:
+            logger.error(f"Error publishing changelog: {e}")
+            return False
+    
     async def _generate_changelog_from_graph(self, repo_owner: str, repo_name: str, **kwargs) -> Dict[str, Any]:
-        """Generate changelog using repository data from Neo4j graph"""
+        """Generate changelog by temporarily cloning repository and analyzing Git history"""
+        temp_dir = None
         try:
             # Extract parameters
             target_audience = kwargs.get('target_audience', 'users')
@@ -689,12 +746,21 @@ class ChangelogService:
             since_date = kwargs.get('since_date')
             comparison_range = kwargs.get('comparison_range')
             
-            # Get repository files and functions from Neo4j
-            repo_data = await self._get_repository_data(repo_owner, repo_name)
+            # Construct GitHub URL
+            github_url = f"https://github.com/{repo_owner}/{repo_name}.git"
             
-            if not repo_data:
+            # Clone repository temporarily
+            temp_dir = tempfile.mkdtemp(prefix="changelog_gen_")
+            logger.info(f"Cloning repository {github_url} to {temp_dir}")
+            
+            try:
+                import git
+                repo = git.Repo.clone_from(github_url, temp_dir)
+                logger.info(f"Successfully cloned repository {repo_owner}/{repo_name}")
+            except Exception as clone_error:
+                logger.error(f"Failed to clone repository: {clone_error}")
                 return {
-                    "error": f"No data found for repository {repo_owner}/{repo_name}",
+                    "error": f"Failed to clone repository {repo_owner}/{repo_name}. Repository may be private or not exist.",
                     "version": None,
                     "date": None,
                     "content": None,
@@ -704,32 +770,18 @@ class ChangelogService:
                     "metadata": {}
                 }
             
-            # Since we don't have Git history in Neo4j, we'll generate a changelog
-            # based on the codebase structure and files
-            changelog_content = await self._generate_changelog_from_codebase(
-                repo_data, target_audience, changelog_format
+            # Generate changelog using the cloned repository
+            changelog_result = await self.generate_changelog(
+                repo_path=temp_dir,
+                repo_name=f"{repo_owner}/{repo_name}",
+                since_version=since_version,
+                since_date=since_date,
+                comparison_range=comparison_range,
+                target_audience=target_audience,
+                changelog_format=changelog_format
             )
             
-            # Generate version number based on existing changelogs
-            version = self._generate_version_from_history(repo_owner, repo_name)
-            
-            return {
-                "version": version,
-                "date": datetime.now(timezone.utc).isoformat(),
-                "content": changelog_content,
-                "commits_analyzed": len(repo_data.get('files', [])),
-                "target_audience": target_audience,
-                "format": changelog_format,
-                "metadata": {
-                    "breaking_changes": [],
-                    "commit_types": {"analysis": len(repo_data.get('files', []))},
-                    "contributors": [{"name": "System", "email": "system@compasschat.ai", "commits": 1}],
-                    "file_count": len(repo_data.get('files', [])),
-                    "function_count": len(repo_data.get('functions', [])),
-                    "class_count": len(repo_data.get('classes', []))
-                },
-                "error": None
-            }
+            return changelog_result
             
         except Exception as e:
             logger.error(f"Error generating changelog from graph: {e}")
@@ -739,10 +791,18 @@ class ChangelogService:
                 "date": None,
                 "content": None,
                 "commits_analyzed": 0,
-                "target_audience": target_audience,
-                "format": changelog_format,
+                "target_audience": kwargs.get('target_audience', 'users'),
+                "format": kwargs.get('changelog_format', 'markdown'),
                 "metadata": {}
             }
+        finally:
+            # Clean up temporary directory
+            if temp_dir:
+                try:
+                    shutil.rmtree(temp_dir)
+                    logger.info(f"Cleaned up temporary directory: {temp_dir}")
+                except Exception as cleanup_error:
+                    logger.warning(f"Failed to cleanup temporary directory: {cleanup_error}")
     
     async def _get_repository_data(self, repo_owner: str, repo_name: str) -> Dict[str, Any]:
         """Get repository data from Neo4j graph"""
@@ -777,7 +837,8 @@ class ChangelogService:
                 
                 result = session.run(query, {
                     'repo_owner': repo_owner,
-                    'repo_name': repo_name
+                    'repo_name': repo_name,
+                    'user_id': user_id
                 })
                 
                 record = result.single()

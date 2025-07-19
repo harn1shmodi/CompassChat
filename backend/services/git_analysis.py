@@ -391,12 +391,27 @@ class GitAnalysisService:
             
             commits = []
             
-            # Parse the range
+            # Validate the range before using it
             if '..' in comparison_range:
                 # Range comparison (from..to)
+                from_ref, to_ref = comparison_range.split('..', 1)
+                
+                # Validate references exist
+                if not self._validate_reference_exists(from_ref):
+                    logger.warning(f"Reference '{from_ref}' does not exist, falling back to recent commits")
+                    return self.get_commits_since(repo_path, since_commit=None)
+                
+                if to_ref != 'HEAD' and not self._validate_reference_exists(to_ref):
+                    logger.warning(f"Reference '{to_ref}' does not exist, using HEAD instead")
+                    comparison_range = f"{from_ref}..HEAD"
+                
                 log_commits = list(self.repo.iter_commits(comparison_range))
             else:
                 # Single reference - get commits since that reference
+                if not self._validate_reference_exists(comparison_range):
+                    logger.warning(f"Reference '{comparison_range}' does not exist, falling back to recent commits")
+                    return self.get_commits_since(repo_path, since_commit=None)
+                
                 log_commits = list(self.repo.iter_commits(f"{comparison_range}..HEAD"))
             
             for commit in log_commits:
@@ -406,7 +421,8 @@ class GitAnalysisService:
             return commits
         except Exception as e:
             logger.error(f"Error getting commits in range {comparison_range}: {e}")
-            return []
+            # Fallback to recent commits
+            return self.get_commits_since(repo_path, since_commit=None)
 
     def detect_comparison_range(self, repo_path: str) -> Dict[str, Any]:
         """Auto-detect the best comparison range for changelog generation"""
@@ -468,7 +484,19 @@ class GitAnalysisService:
             self.repo_path = Path(repo_path)
             self.repo = git.Repo(repo_path)
             
+            # Validate that the tag exists
+            if not self._validate_tag_exists(from_tag):
+                logger.warning(f"Tag '{from_tag}' does not exist, trying with 'v' prefix")
+                if not from_tag.startswith('v'):
+                    from_tag = f"v{from_tag}"
+                    if not self._validate_tag_exists(from_tag):
+                        logger.error(f"Tag '{from_tag}' does not exist, falling back to commit count")
+                        return self.get_commits_since(repo_path, since_commit=None)
+            
             if to_tag:
+                if not self._validate_tag_exists(to_tag):
+                    logger.warning(f"Tag '{to_tag}' does not exist, using HEAD instead")
+                    to_tag = "HEAD"
                 commit_range = f"{from_tag}..{to_tag}"
             else:
                 commit_range = f"{from_tag}..HEAD"
@@ -481,4 +509,55 @@ class GitAnalysisService:
             return commits
         except Exception as e:
             logger.error(f"Error getting commits between tags: {e}")
-            return []
+            # Fallback to recent commits if tag-based comparison fails
+            return self.get_commits_since(repo_path, since_commit=None)
+    
+    def _validate_tag_exists(self, tag: str) -> bool:
+        """Validate that a tag exists in the repository"""
+        try:
+            if not self.repo:
+                return False
+            
+            # Check if tag exists in repository
+            for repo_tag in self.repo.tags:
+                if repo_tag.name == tag:
+                    return True
+            
+            return False
+        except Exception as e:
+            logger.error(f"Error validating tag {tag}: {e}")
+            return False
+    
+    def _validate_reference_exists(self, ref: str) -> bool:
+        """Validate that a reference (tag, branch, or commit) exists in the repository"""
+        try:
+            if not self.repo:
+                return False
+            
+            # Special case for HEAD
+            if ref == 'HEAD':
+                return True
+            
+            # Check if it's a tag
+            if self._validate_tag_exists(ref):
+                return True
+            
+            # Check if it's a branch
+            try:
+                for branch in self.repo.branches:
+                    if branch.name == ref:
+                        return True
+            except:
+                pass
+            
+            # Check if it's a commit hash
+            try:
+                self.repo.commit(ref)
+                return True
+            except:
+                pass
+            
+            return False
+        except Exception as e:
+            logger.error(f"Error validating reference {ref}: {e}")
+            return False

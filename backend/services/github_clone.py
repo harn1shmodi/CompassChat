@@ -39,7 +39,7 @@ class GitHubCloner:
             files = self.get_source_files(self.temp_dir)
             yield {"status": "files", "data": {"files": files, "temp_dir": self.temp_dir}}
             
-            yield {"status": "complete", "message": "Repository analysis ready"}
+            yield {"status": "cloning_complete", "message": "Repository cloning complete"}
             
         except Exception as e:
             logger.error(f"Error cloning repository: {e}")
@@ -83,27 +83,35 @@ class GitHubCloner:
             }
     
     def get_source_files(self, repo_path: str) -> list:
-        """Get list of source code files"""
+        """Get list of source code and documentation files"""
         source_extensions = {
+            # Source code files
             '.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.cpp', '.c', '.h', '.hpp',
-            '.cs', '.go', '.rs', '.php', '.rb', '.swift', '.kt', '.scala', '.sh'
+            '.cs', '.go', '.rs', '.php', '.rb', '.swift', '.kt', '.scala', '.sh',
+            # Documentation files
+            '.md', '.json', '.txt', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf',
+            # Configuration and build files
+            'Dockerfile', 'docker-compose.yml', 'package.json', 'requirements.txt',
+            'composer.json', 'pom.xml', 'build.gradle', 'Cargo.toml', 'go.mod'
         }
         
         files = []
         repo_path = Path(repo_path)
         
         for file_path in repo_path.rglob("*"):
-            if (file_path.is_file() and 
-                file_path.suffix.lower() in source_extensions and
-                not self.should_ignore_path(file_path, repo_path)):
+            if file_path.is_file() and not self.should_ignore_path(file_path, repo_path):
+                # Check extension or exact filename match
+                file_name = file_path.name
+                file_extension = file_path.suffix.lower()
                 
-                relative_path = file_path.relative_to(repo_path)
-                files.append({
-                    "path": str(relative_path),
-                    "absolute_path": str(file_path),
-                    "size": file_path.stat().st_size,
-                    "extension": file_path.suffix.lower()
-                })
+                if file_extension in source_extensions or file_name in source_extensions:
+                    relative_path = file_path.relative_to(repo_path)
+                    files.append({
+                        "path": str(relative_path),
+                        "absolute_path": str(file_path),
+                        "size": file_path.stat().st_size,
+                        "extension": file_extension or file_name
+                    })
         
         return files
     

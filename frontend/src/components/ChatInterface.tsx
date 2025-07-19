@@ -41,7 +41,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   repository,
   analysisProgress,
   isAnalyzing,
-  authHeaders,
+  authHeaders: _authHeaders,
   onConnectionStatusChange
 }) => {
   const [messages, setMessages] = useState<Message[]>([]);

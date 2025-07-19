@@ -26,5 +26,13 @@ redis
 # Async HTTP and rate limiting
 aiohttp
 tenacity
+ratelimit
+# AI providers
+google-generativeai
 # Performance monitoring
 psutil
+# Documentation parsing
+PyYAML
+# TOML parsing
+tomli-w
+toml

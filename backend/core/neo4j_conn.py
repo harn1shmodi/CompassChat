@@ -14,7 +14,15 @@ class Neo4jConnection:
         try:
             self.driver = GraphDatabase.driver(
                 settings.neo4j_uri,
-                auth=(settings.neo4j_user, settings.neo4j_password)
+                auth=(settings.neo4j_user, settings.neo4j_password),
+                max_connection_lifetime=200,  # 200 seconds
+                max_connection_pool_size=50,  # Increase from default 100
+                connection_acquisition_timeout=60,  # 60 seconds
+                max_transaction_retry_time=30,  # 30 seconds
+                resolver=None,  # Use default resolver
+                encrypted=False,  # Set to True for production with SSL
+                trust="TRUST_ALL_CERTIFICATES",  # Allow self-signed certificates for development
+                user_agent="CompassChat/1.0"  # Custom user agent
             )
             # Test connection
             with self.driver.session(database=settings.neo4j_database) as session:
@@ -28,7 +36,7 @@ class Neo4jConnection:
         if self.driver:
             self.driver.close()
     
-    def get_session(self):
+    def get_session(self, timeout=None):
         return self.driver.session(database=settings.neo4j_database)
     
     def create_indexes(self):

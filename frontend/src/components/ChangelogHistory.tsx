@@ -8,8 +8,10 @@ import {
   FileText, 
   X,
   BarChart3,
-  Users,
-  Loader2 
+  Loader2,
+  Share2,
+  Check,
+  Upload
 } from 'lucide-react';
 import './ChangelogHistory.css';
 
@@ -19,6 +21,7 @@ interface ChangelogEntry {
   content: string;
   target_audience: string;
   format: string;
+  is_published: boolean;
   metadata: {
     commits_analyzed: number;
     breaking_changes: string[];
@@ -39,6 +42,8 @@ export const ChangelogHistory: React.FC<ChangelogHistoryProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<ChangelogEntry | null>(null);
+  const [publishingVersions, setPublishingVersions] = useState<Set<string>>(new Set());
+  const [publishMessage, setPublishMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (repository) {
@@ -111,6 +116,50 @@ export const ChangelogHistory: React.FC<ChangelogHistoryProps> = ({
     window.open(publicUrl, '_blank');
   };
 
+  const publishChangelog = async (version: string) => {
+    if (!repository) return;
+
+    setPublishingVersions(prev => new Set(prev).add(version));
+    setPublishMessage(null);
+
+    try {
+      const [repoOwner, repoName] = repository.split('/');
+      const response = await fetch(`/api/changelog/publish/${repoOwner}/${repoName}/${version}`, {
+        method: 'POST',
+        headers: authHeaders ? authHeaders() : {}
+      });
+
+      if (response.ok) {
+        await response.json();
+        setPublishMessage(`Successfully published changelog ${version}`);
+        
+        // Update the local state to reflect the published status
+        setHistory(prevHistory => 
+          prevHistory.map(entry => 
+            entry.version === version 
+              ? { ...entry, is_published: true }
+              : entry
+          )
+        );
+        
+        // Clear success message after 3 seconds
+        setTimeout(() => setPublishMessage(null), 3000);
+      } else {
+        const errorData = await response.json();
+        setPublishMessage(`Failed to publish: ${errorData.detail || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Error publishing changelog:', error);
+      setPublishMessage('An error occurred while publishing the changelog');
+    } finally {
+      setPublishingVersions(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(version);
+        return newSet;
+      });
+    }
+  };
+
   if (!repository) {
     return (
       <div className="changelog-history-placeholder">
@@ -143,19 +192,23 @@ export const ChangelogHistory: React.FC<ChangelogHistoryProps> = ({
             {loading ? 'Loading...' : 'Refresh'}
           </button>
         </div>
+        {publishMessage && (
+          <div className={`publish-message ${publishMessage.includes('Successfully') ? 'success' : 'error'}`}>
+            {publishMessage.includes('Successfully') ? <Check size={16} /> : <AlertTriangle size={16} />}
+            {publishMessage}
+          </div>
+        )}
       </div>
 
-      <div className="changelog-history-content">
-        {loading && (
+      <div className={`changelog-history-content ${loading ? 'loading' : ''}`}>
+        {loading ? (
           <div className="loading-state">
             <div className="loading-spinner">
               <Loader2 size={40} className="animate-spin" />
               <p>Loading changelog history...</p>
             </div>
           </div>
-        )}
-
-        {error && (
+        ) : error ? (
           <div className="error-state">
             <div className="error-icon"><AlertTriangle size={32} /></div>
             <div className="error-content">
@@ -166,18 +219,14 @@ export const ChangelogHistory: React.FC<ChangelogHistoryProps> = ({
               </button>
             </div>
           </div>
-        )}
-
-        {!loading && !error && history.length === 0 && (
+        ) : history.length === 0 ? (
           <div className="empty-state">
             <div className="empty-icon"><FileText size={48} /></div>
             <h3>No Changelog History</h3>
             <p>This repository doesn't have any changelog entries yet.</p>
             <p>Generate your first changelog to get started!</p>
           </div>
-        )}
-
-        {!loading && !error && history.length > 0 && (
+        ) : (
           <div className="changelog-entries">
             <div className="entries-list">
               {history.map((entry, index) => (
@@ -187,11 +236,43 @@ export const ChangelogHistory: React.FC<ChangelogHistoryProps> = ({
                   onClick={() => setSelectedEntry(entry)}
                 >
                   <div className="entry-header">
-                    <div className={`version-badge ${getVersionColor(entry.version)}`}>
-                      {entry.version}
+                    <div className="version-info">
+                      <div className={`version-badge ${getVersionColor(entry.version)}`}>
+                        {entry.version}
+                      </div>
+                      {entry.is_published && (
+                        <div className="published-indicator">
+                          <Share2 size={14} /> Published
+                        </div>
+                      )}
                     </div>
-                    <div className="entry-date">
-                      {formatDate(entry.date)}
+                    <div className="entry-actions">
+                      <div className="entry-date">
+                        {formatDate(entry.date)}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          publishChangelog(entry.version);
+                        }}
+                        disabled={publishingVersions.has(entry.version)}
+                        className={`btn btn-sm ${entry.is_published ? 'btn-outline' : 'btn-primary'}`}
+                        title={entry.is_published ? 'Update public changelog' : 'Publish to public changelog'}
+                      >
+                        {publishingVersions.has(entry.version) ? (
+                          <Loader2 size={14} className="animate-spin" />
+                        ) : entry.is_published ? (
+                          <Upload size={14} />
+                        ) : (
+                          <Share2 size={14} />
+                        )}
+                        {publishingVersions.has(entry.version) 
+                          ? 'Publishing...' 
+                          : entry.is_published 
+                            ? 'Update' 
+                            : 'Publish'
+                        }
+                      </button>
                     </div>
                   </div>
                   
