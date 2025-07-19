@@ -77,30 +77,61 @@ class DatabaseManager:
         if not database_url:
             database_url = os.getenv("DATABASE_URL", "sqlite:///./compasschat.db")
         
+        logger.info(f"Initializing database with URL type: {'PostgreSQL' if database_url.startswith('postgresql://') else 'SQLite'}")
+        
         # Handle missing psycopg2 gracefully
         if database_url.startswith("postgresql://"):
             try:
                 import psycopg2
+                logger.info("psycopg2 module available")
             except ImportError:
                 logger.error("psycopg2 not installed but PostgreSQL URL provided. Falling back to SQLite.")
                 database_url = "sqlite:///./compasschat.db"
         
-        # Handle Supabase SSL requirements
+        # Enhanced connection handling for Supabase
         connect_args = {}
         if database_url.startswith("postgresql://"):
-            connect_args = {"sslmode": "require"}
+            connect_args = {
+                "sslmode": "require",
+                "connect_timeout": 30,
+                # Force IPv4 to avoid IPv6 routing issues
+                "options": "-c default_transaction_isolation=read_committed"
+            }
+            logger.info("Attempting PostgreSQL connection with SSL required")
         
         try:
-            self.engine = create_engine(database_url, connect_args=connect_args)
-            Base.metadata.create_all(bind=self.engine)
-            logger.info(f"Database connected successfully to: {database_url.split('@')[0]}@***")
-        except Exception as e:
-            logger.error(f"Database connection failed: {e}")
-            # Fallback to SQLite if PostgreSQL fails
+            # Try connecting with pool settings for better reliability
             if database_url.startswith("postgresql://"):
-                logger.info("Falling back to SQLite database")
-                self.engine = create_engine("sqlite:///./compasschat.db")
-                Base.metadata.create_all(bind=self.engine)
+                self.engine = create_engine(
+                    database_url, 
+                    connect_args=connect_args,
+                    pool_pre_ping=True,
+                    pool_recycle=300,
+                    echo=False  # Set to True for SQL debugging
+                )
+            else:
+                self.engine = create_engine(database_url)
+            
+            # Test the connection before proceeding
+            with self.engine.connect() as conn:
+                conn.execute("SELECT 1")
+            
+            Base.metadata.create_all(bind=self.engine)
+            logger.info(f"✅ Database connected successfully to: {database_url.split('@')[0] if '@' in database_url else 'SQLite'}@***")
+            
+        except Exception as e:
+            logger.error(f"❌ Database connection failed: {e}")
+            # Enhanced fallback to SQLite if PostgreSQL fails
+            if database_url.startswith("postgresql://"):
+                logger.warning("🔄 PostgreSQL connection failed, falling back to SQLite database")
+                logger.warning("⚠️  Note: Data will not persist between deployments with SQLite")
+                try:
+                    self.engine = create_engine("sqlite:///./compasschat.db")
+                    Base.metadata.create_all(bind=self.engine)
+                    logger.info("✅ SQLite fallback successful")
+                except Exception as sqlite_error:
+                    logger.error(f"❌ SQLite fallback also failed: {sqlite_error}")
+                    raise
             else:
                 raise
     
