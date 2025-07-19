@@ -20,6 +20,7 @@ neo4j-driver
 # Database and authentication
 sqlalchemy
 psycopg2-binary
+psycopg2
 passlib[bcrypt]
 python-jose[cryptography]
 # Caching
