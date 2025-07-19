@@ -3,6 +3,10 @@ import { RepoInput } from './components/RepoInput';
 import { ChatInterface } from './components/ChatInterface';
 import { Auth } from './components/Auth';
 import { RepoHistory } from './components/RepoHistory';
+import { ChangelogGenerator } from './components/ChangelogGenerator';
+import { ChangelogHistory } from './components/ChangelogHistory';
+import { ProgressDialog } from './components/ProgressDialog';
+import { User as UserIcon, Sun, Moon, MessageCircle, GitBranch, History } from 'lucide-react';
 import './App.css';
 
 interface User {
@@ -19,6 +23,8 @@ interface AnalysisProgress {
   stats?: any;
 }
 
+type TabType = 'chat' | 'changelog' | 'history';
+
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -28,6 +34,8 @@ function App() {
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [showRepoHistory, setShowRepoHistory] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected'>('disconnected');
+  const [activeTab, setActiveTab] = useState<TabType>('chat');
+  const [currentAnalyzingRepo, setCurrentAnalyzingRepo] = useState<string>('');
 
   // Check for existing session on load
   useEffect(() => {
@@ -65,12 +73,18 @@ function App() {
   };
 
   const handleLogout = () => {
+    // Clear user session
     setUser(null);
     setSessionToken(null);
     setRepository(null);
     setShowRepoHistory(false);
     localStorage.removeItem('session_token');
     localStorage.removeItem('user_data');
+    
+    // Clear analysis state to prevent stale progress bars
+    setIsAnalyzing(false);
+    setAnalysisProgress(null);
+    setCurrentAnalyzingRepo('');
   };
 
   const handleBackToHome = () => {
@@ -88,28 +102,85 @@ function App() {
     ...(sessionToken && { 'Authorization': `Bearer ${sessionToken}` }),
   });
 
+  const refreshToken = async () => {
+    try {
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSessionToken(data.session_token);
+        localStorage.setItem('session_token', data.session_token);
+        return data.session_token;
+      }
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+    }
+    return null;
+  };
+
+  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+    const headers = { ...getAuthHeaders(), ...options.headers };
+    
+    let response = await fetch(url, { ...options, headers });
+    
+    // If 401, try to refresh token once
+    if (response.status === 401 && sessionToken) {
+      const newToken = await refreshToken();
+      if (newToken) {
+        const newHeaders = {
+          ...headers,
+          'Authorization': `Bearer ${newToken}`
+        };
+        response = await fetch(url, { ...options, headers: newHeaders });
+      }
+    }
+    
+    // If still 401, logout user
+    if (response.status === 401) {
+      handleLogout();
+    }
+    
+    return response;
+  };
+
+  const handleCancelAnalysis = () => {
+    setIsAnalyzing(false);
+    setAnalysisProgress(null);
+    setCurrentAnalyzingRepo('');
+  };
+
   const handleAnalyzeRepository = async (url: string) => {
     setIsAnalyzing(true);
     setAnalysisProgress(null);
     setRepository(null);
 
+    // Create AbortController for timeout handling
+    const abortController = new AbortController();
+    let timeoutId: number | null = null;
+
     try {
       // Extract repository name from URL
       const repoMatch = url.match(/github\.com\/([^\/]+\/[^\/]+)/);
       const repoName = repoMatch ? repoMatch[1] : url;
+      setCurrentAnalyzingRepo(repoName);
+
+      let isComplete = false;
+
+      timeoutId = window.setTimeout(() => {
+        abortController.abort();
+      }, 900000); // 15 minutes timeout (longer than nginx 10min)
 
       // Start repository analysis with auth headers
-      const response = await fetch('/api/repos/analyze', {
+      const response = await fetchWithAuth('/api/repos/analyze', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify({ url }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
-        if (response.status === 401) {
-          handleLogout();
-          return;
-        }
         throw new Error('Failed to start repository analysis');
       }
 
@@ -123,7 +194,9 @@ function App() {
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done) {
+          break;
+        }
 
         buffer += decoder.decode(value, { stream: true });
         
@@ -138,11 +211,14 @@ function App() {
               setAnalysisProgress(data);
 
               if (data.status === 'complete') {
+                isComplete = true;
                 setRepository(repoName);
                 setIsAnalyzing(false);
+                setCurrentAnalyzingRepo('');
               } else if (data.status === 'error') {
                 console.error('Analysis error:', data.message);
                 setIsAnalyzing(false);
+                setCurrentAnalyzingRepo('');
               }
             } catch (error) {
               console.error('Error parsing SSE data:', error);
@@ -150,13 +226,43 @@ function App() {
           }
         }
       }
+      
+      // Clear timeout on successful completion
+      if (timeoutId) clearTimeout(timeoutId);
+      
+      // If we reach here without getting a 'complete' status, the stream ended prematurely
+      if (!isComplete) {
+        console.warn('Analysis stream ended without completion signal');
+        // Keep the progress dialog open - don't immediately show error
+        // Let the user see the last progress state and decide to wait or cancel
+        setAnalysisProgress(prev => ({
+          ...prev,
+          status: prev?.status || 'indexing',
+          message: 'Analysis continuing... This may take a few more minutes for large repositories.'
+        }));
+      }
     } catch (error) {
+      if (timeoutId) clearTimeout(timeoutId);
       console.error('Error analyzing repository:', error);
-      setIsAnalyzing(false);
-      setAnalysisProgress({
-        status: 'error',
-        message: 'Failed to analyze repository. Please try again.'
-      });
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        setIsAnalyzing(false);
+        setCurrentAnalyzingRepo('');
+        setAnalysisProgress({
+          status: 'error',
+          message: 'Analysis timed out after 15 minutes. Large repositories may require more time.'
+        });
+      } else if (error instanceof Error && error.message.includes('Failed to start')) {
+        // Authentication or server error - don't show error state, let logout handle it
+        console.log('Analysis start failed, likely due to authentication issue');
+      } else {
+        setIsAnalyzing(false);
+        setCurrentAnalyzingRepo('');
+        setAnalysisProgress({
+          status: 'error',
+          message: 'Failed to analyze repository. Please try again.'
+        });
+      }
     }
   };
 
@@ -194,14 +300,14 @@ function App() {
         </div>
         <div className="top-bar-actions">
           <span className="username-display">
-            👤 {user.username}
+            <UserIcon size={16} /> {user.username}
           </span>
           <button 
             onClick={() => setIsDarkMode(!isDarkMode)}
             className="action-button"
             title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
           >
-            {isDarkMode ? '☀️' : '🌙'}
+            {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
           </button>
           <button onClick={handleLogout} className="action-button">
             Logout
@@ -226,19 +332,60 @@ function App() {
             />
           </div>
         ) : (
-          <div className="chat-container" style={{ 
+          <div className="main-container" style={{ 
             width: '100%', 
             height: '100%', 
             display: 'flex', 
             flexDirection: 'column'
           }}>
-            <ChatInterface 
-              repository={repository}
-              analysisProgress={analysisProgress}
-              isAnalyzing={isAnalyzing}
-              authHeaders={getAuthHeaders}
-              onConnectionStatusChange={setConnectionStatus}
-            />
+            {/* Tab Navigation */}
+            <div className="tab-navigation">
+              <button 
+                className={`tab-button ${activeTab === 'chat' ? 'active' : ''}`}
+                onClick={() => setActiveTab('chat')}
+              >
+                <MessageCircle size={16} /> Chat
+              </button>
+              <button 
+                className={`tab-button ${activeTab === 'changelog' ? 'active' : ''}`}
+                onClick={() => setActiveTab('changelog')}
+              >
+                <GitBranch size={16} /> Generate Changelog
+              </button>
+              <button 
+                className={`tab-button ${activeTab === 'history' ? 'active' : ''}`}
+                onClick={() => setActiveTab('history')}
+              >
+                <History size={16} /> Changelog History
+              </button>
+            </div>
+
+            {/* Tab Content */}
+            <div className="tab-content">
+              {activeTab === 'chat' && (
+                <ChatInterface 
+                  repository={repository}
+                  analysisProgress={analysisProgress}
+                  isAnalyzing={isAnalyzing}
+                  authHeaders={getAuthHeaders}
+                  onConnectionStatusChange={setConnectionStatus}
+                />
+              )}
+              {activeTab === 'changelog' && (
+                <ChangelogGenerator 
+                  repository={repository}
+                  authHeaders={getAuthHeaders}
+                  fetchWithAuth={fetchWithAuth}
+                />
+              )}
+              {activeTab === 'history' && (
+                <ChangelogHistory 
+                  repository={repository}
+                  authHeaders={getAuthHeaders}
+                  fetchWithAuth={fetchWithAuth}
+                />
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -246,11 +393,19 @@ function App() {
       {/* Repository History Modal */}
       {showRepoHistory && (
         <RepoHistory
-          authHeaders={getAuthHeaders}
+          fetchWithAuth={fetchWithAuth}
           onSelectRepository={handleSelectRepository}
           onClose={() => setShowRepoHistory(false)}
         />
       )}
+      
+      {/* Progress Dialog */}
+      <ProgressDialog
+        isOpen={isAnalyzing && currentAnalyzingRepo !== ''}
+        repository={currentAnalyzingRepo}
+        progress={analysisProgress}
+        onCancel={handleCancelAnalysis}
+      />
       
       {analysisProgress && analysisProgress.status === 'error' && (
         <div className="error-overlay">
@@ -262,6 +417,7 @@ function App() {
                 setAnalysisProgress(null);
                 setRepository(null);
                 setIsAnalyzing(false);
+                setCurrentAnalyzingRepo('');
               }}
               className="error-close-button"
             >

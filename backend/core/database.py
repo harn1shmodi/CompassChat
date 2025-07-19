@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, ForeignKey, JSON, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy import create_engine
@@ -6,6 +6,9 @@ from datetime import datetime, timedelta
 import hashlib
 import secrets
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 Base = declarative_base()
 
@@ -72,10 +75,69 @@ class UserRepositoryAnalysis(Base):
 class DatabaseManager:
     def __init__(self, database_url: str = None):
         if not database_url:
-            database_url = os.getenv("DATABASE_URL", "sqlite:///./compasschat.db")
+            # Import here to avoid circular imports
+            from core.config import settings
+            database_url = settings.database_url
         
-        self.engine = create_engine(database_url)
-        Base.metadata.create_all(bind=self.engine)
+        logger.info(f"Initializing database with URL type: {'PostgreSQL' if database_url.startswith('postgresql://') else 'SQLite'}")
+        
+        # Handle missing psycopg2 gracefully
+        if database_url.startswith("postgresql://"):
+            try:
+                import psycopg2
+                logger.info("psycopg2 module available")
+            except ImportError:
+                logger.error("psycopg2 not installed but PostgreSQL URL provided. Falling back to SQLite.")
+                database_url = "sqlite:///./compasschat.db"
+        
+        # Enhanced connection handling for Supabase
+        connect_args = {}
+        if database_url.startswith("postgresql://"):
+            connect_args = {
+                "sslmode": "require",
+                "connect_timeout": 30,
+                # Force IPv4 to avoid IPv6 routing issues
+                "options": "-c default_transaction_isolation=read_committed"
+            }
+            logger.info("Attempting PostgreSQL connection with SSL required")
+        
+        try:
+            # Try connecting with pool settings for better reliability
+            if database_url.startswith("postgresql://"):
+                self.engine = create_engine(
+                    database_url, 
+                    connect_args=connect_args,
+                    pool_pre_ping=True,
+                    pool_recycle=300,
+                    echo=False  # Set to True for SQL debugging
+                )
+            else:
+                self.engine = create_engine(database_url)
+            
+            # Create tables and test connection
+            Base.metadata.create_all(bind=self.engine)
+            
+            # Simple connection test without raw SQL
+            with self.engine.connect() as conn:
+                pass  # Just test that we can connect
+            
+            logger.info(f"✅ Database connected successfully to: {database_url.split('@')[0] if '@' in database_url else 'SQLite'}@***")
+            
+        except Exception as e:
+            logger.error(f"❌ Database connection failed: {e}")
+            # Enhanced fallback to SQLite if PostgreSQL fails
+            if database_url.startswith("postgresql://"):
+                logger.warning("🔄 PostgreSQL connection failed, falling back to SQLite database")
+                logger.warning("⚠️  Note: Data will not persist between deployments with SQLite")
+                try:
+                    self.engine = create_engine("sqlite:///./compasschat.db")
+                    Base.metadata.create_all(bind=self.engine)
+                    logger.info("✅ SQLite fallback successful")
+                except Exception as sqlite_error:
+                    logger.error(f"❌ SQLite fallback also failed: {sqlite_error}")
+                    raise
+            else:
+                raise
     
     def get_session(self) -> Session:
         from sqlalchemy.orm import sessionmaker
@@ -131,13 +193,15 @@ class DatabaseManager:
         try:
             # Generate session token
             session_token = secrets.token_urlsafe(32)
-            expires_at = datetime.utcnow() + timedelta(days=7)  # 7 day expiry
+            expires_at = datetime.utcnow() + timedelta(days=30)  # 30 day expiry
             
-            # Deactivate old sessions (optional - keep only one active session)
+            # Mark old sessions for deactivation after grace period (prevents race conditions)
+            # Instead of immediate deactivation, set expiry to 30 seconds from now
+            grace_period_expiry = datetime.utcnow() + timedelta(seconds=30)
             session.query(UserSession).filter(
                 UserSession.user_id == user_id,
                 UserSession.is_active == True
-            ).update({"is_active": False})
+            ).update({"expires_at": grace_period_expiry})
             
             # Create new session
             user_session = UserSession(
@@ -163,10 +227,45 @@ class DatabaseManager:
             ).first()
             
             if user_session:
-                # Update last accessed
-                user_session.user.repository_analyses
+                # Auto-extend session if within 7 days of expiry (use total_seconds for precision)
+                time_until_expiry = (user_session.expires_at - datetime.utcnow()).total_seconds()
+                days_until_expiry = time_until_expiry / 86400  # 24 * 60 * 60 seconds per day
+                
+                if days_until_expiry <= 7:
+                    user_session.expires_at = datetime.utcnow() + timedelta(days=30)
+                    session.commit()
+                    logger.info(f"Auto-extended session for user {user_session.user.username}, {days_until_expiry:.2f} days remaining")
+                
                 return user_session.user
             return None
+        finally:
+            session.close()
+    
+    def cleanup_expired_sessions(self):
+        """Clean up truly expired sessions (called periodically)"""
+        session = self.get_session()
+        try:
+            expired_count = session.query(UserSession).filter(
+                UserSession.expires_at < datetime.utcnow()
+            ).delete()
+            session.commit()
+            if expired_count > 0:
+                logger.info(f"Cleaned up {expired_count} expired sessions")
+        finally:
+            session.close()
+    
+    def deactivate_session(self, session_token: str):
+        """Deactivate a specific session"""
+        session = self.get_session()
+        try:
+            user_session = session.query(UserSession).filter(
+                UserSession.session_token == session_token,
+                UserSession.is_active == True
+            ).first()
+            
+            if user_session:
+                user_session.is_active = False
+                session.commit()
         finally:
             session.close()
     

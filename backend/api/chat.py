@@ -31,10 +31,12 @@ async def chat_with_code(request: ChatRequest, current_user: User = Depends(get_
     try:
         graph_service = GraphService()
         
-        # Search for relevant code chunks
+        # Search for relevant code chunks with user isolation
         search_results = graph_service.search_code(
             query=request.question,
-            limit=request.max_results
+            limit=request.max_results,
+            repository=request.repository,
+            user_id=current_user.username
         )
         
         if not search_results:
@@ -99,18 +101,29 @@ async def websocket_chat(websocket: WebSocket):
                 continue
             
             try:
+                import time
+                start_time = time.time()
+                
+                logger.info(f"Starting chat request - Question: '{question[:100]}...' Repository: '{repository}'")
+                
                 # Send thinking status
                 await websocket.send_text(json.dumps({
                     'type': 'status',
                     'message': 'Searching code...'
                 }))
                 
-                # Search for relevant code
+                # Search for relevant code with timeout
+                search_start = time.time()
+                logger.info(f"Starting code search for question: '{question[:50]}...'")
+                
                 search_results = graph_service.search_code(
                     query=question,
                     limit=max_results,
                     repository=repository
                 )
+                
+                search_duration = time.time() - search_start
+                logger.info(f"Code search completed in {search_duration:.2f}s, found {len(search_results)} results")
                 
                 await websocket.send_text(json.dumps({
                     'type': 'status',
@@ -118,6 +131,7 @@ async def websocket_chat(websocket: WebSocket):
                 }))
                 
                 if not search_results:
+                    logger.warning(f"No search results found for question: '{question[:50]}...' in repository: '{repository}'")
                     await websocket.send_text(json.dumps({
                         'type': 'answer',
                         'content': "I couldn't find any relevant code for your question. Please make sure the repository has been analyzed.",
@@ -146,6 +160,9 @@ async def websocket_chat(websocket: WebSocket):
                 }))
                 
                 # Generate streaming answer
+                stream_start = time.time()
+                logger.info(f"Starting answer generation for question: '{question[:50]}...'")
+                
                 chunk_count = 0
                 for chunk in stream_answer_with_context(
                     question=question,
@@ -158,7 +175,8 @@ async def websocket_chat(websocket: WebSocket):
                         'content': chunk
                     }))
                 
-                logger.info(f"Streamed {chunk_count} chunks for question: {question[:50]}...")
+                stream_duration = time.time() - stream_start
+                logger.info(f"Answer generation completed in {stream_duration:.2f}s, streamed {chunk_count} chunks")
                 
                 # Send sources
                 sources = format_sources(search_results)
@@ -173,8 +191,13 @@ async def websocket_chat(websocket: WebSocket):
                     'type': 'complete'
                 }))
                 
+                total_duration = time.time() - start_time
+                logger.info(f"Chat request completed successfully in {total_duration:.2f}s total")
+                
             except Exception as e:
                 logger.error(f"Error processing chat message: {e}")
+                import traceback
+                logger.error(f"Full traceback: {traceback.format_exc()}")
                 await websocket.send_text(json.dumps({
                     'type': 'error',
                     'message': 'An error occurred while processing your question'

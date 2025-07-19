@@ -41,7 +41,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   repository,
   analysisProgress,
   isAnalyzing,
-  authHeaders,
+  authHeaders: _authHeaders,
   onConnectionStatusChange
 }) => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -94,7 +94,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const connectWebSocket = () => {
     try {
       setConnectionStatus('connecting');
-      const wsUrl = `ws://localhost:8000/api/chat/ws`;
+      const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/chat/ws`;
       const websocket = new WebSocket(wsUrl);
 
       websocket.onopen = () => {
@@ -369,15 +369,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             disabled={!inputMessage.trim() || isLoading || isAnalyzing || connectionStatus !== 'connected'}
             className="send-button"
           >
-            {isLoading ? (
-              <div className="loading-spinner">
-                <div className="spinner-dot"></div>
-                <div className="spinner-dot"></div>
-                <div className="spinner-dot"></div>
-              </div>
-            ) : (
-              '➤'
-            )}
+            ➤
           </button>
         </div>
       </div>

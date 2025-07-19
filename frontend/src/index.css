@@ -64,7 +64,7 @@
   --muted-foreground: 0 0% 63.5294%;
   --accent: 0 0% 19.2157%;
   --accent-foreground: 0 0% 98.0392%;
-  --destructive: 6.6667 60.0000% 20.5882%;
+  --destructive: 12.0000 45.0000% 45.0000%;
   --destructive-foreground: 12.0000 12.1951% 91.9608%;
   --border: 0 0% 16.0784%;
   --input: 0 0% 14.1176%;
@@ -136,7 +136,7 @@ body {
   --muted-foreground: 0 0% 63.5294%;
   --accent: 0 0% 19.2157%;
   --accent-foreground: 0 0% 98.0392%;
-  --destructive: 6.6667 60.0000% 20.5882%;
+  --destructive: 12.0000 45.0000% 45.0000%;
   --destructive-foreground: 12.0000 12.1951% 91.9608%;
   --border: 0 0% 16.0784%;
   --input: 0 0% 14.1176%;

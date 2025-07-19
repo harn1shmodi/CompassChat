@@ -10,6 +10,7 @@ from typing import List, Dict, Any
 import hashlib
 import logging
 import re
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,15 @@ class CodeChunker:
             )
             self.use_llamaindex = False
             logger.info("Using fallback SimpleCodeSplitter")
+        
+        # Import documentation parser
+        try:
+            from services.documentation_parser import DocumentationParser
+            self.doc_parser = DocumentationParser()
+            logger.info("Documentation parser initialized")
+        except ImportError:
+            self.doc_parser = None
+            logger.warning("Documentation parser not available")
     
     def chunk_file(self, ast_info: Dict[str, Any], repo_root: str = None) -> List[Dict[str, Any]]:
         """Chunk a file into semantic segments"""
@@ -72,6 +82,13 @@ class CodeChunker:
         file_path = ast_info['file_path']  # This is now already normalized
         content = ast_info['content']
         language = ast_info['language']
+        
+        # Handle documentation files with special parser
+        if self.doc_parser and self.doc_parser.should_parse_file(file_path):
+            doc_chunks = self._create_documentation_chunks(ast_info)
+            if doc_chunks:
+                chunks.extend(doc_chunks)
+            return chunks
         
         # Update splitter language if using LlamaIndex
         if self.use_llamaindex:
@@ -243,6 +260,193 @@ class CodeChunker:
             logger.error(f"Error creating file chunks: {e}")
             
         return chunks
+    
+    def _create_documentation_chunks(self, ast_info: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Create chunks for documentation and configuration files"""
+        chunks = []
+        file_path = ast_info['file_path']
+        content = ast_info['content']
+        
+        if not self.doc_parser:
+            return []
+        
+        # Parse the documentation file
+        parsed_data = self.doc_parser.parse_file(file_path, content)
+        
+        # Create different types of chunks based on file type
+        file_name = os.path.basename(file_path)
+        
+        if file_name.lower() == 'readme.md':
+            # Create project overview chunks from README
+            chunks.append(self._create_project_overview_chunk(parsed_data, file_path))
+            
+            # Create feature chunks
+            if parsed_data.get('features'):
+                for feature in parsed_data['features']:
+                    chunks.append(self._create_feature_chunk(feature, file_path))
+            
+            # Create description chunk
+            if parsed_data.get('description'):
+                chunks.append(self._create_description_chunk(parsed_data, file_path))
+                
+        elif file_name == 'package.json':
+            # Create project metadata chunks from package.json
+            chunks.append(self._create_package_json_chunk(parsed_data, file_path))
+            
+        elif file_name == 'requirements.txt':
+            # Create Python project overview
+            chunks.append(self._create_requirements_chunk(parsed_data, file_path))
+            
+        elif file_name in ['Dockerfile', 'docker-compose.yml', 'docker-compose.yaml']:
+            # Create deployment overview
+            chunks.append(self._create_docker_chunk(parsed_data, file_path))
+            
+        else:
+            # Generic documentation chunk
+            chunks.append(self._create_generic_doc_chunk(parsed_data, file_path))
+        
+        return chunks
+    
+    def _create_project_overview_chunk(self, parsed_data: Dict[str, Any], file_path: str) -> Dict[str, Any]:
+        """Create a project overview chunk from README"""
+        return {
+            'id': self._generate_chunk_id(file_path, 'project_overview', 'documentation'),
+            'type': 'project_overview',
+            'file_path': file_path,
+            'language': 'markdown',
+            'name': 'Project Overview',
+            'content': f"""
+Project Title: {parsed_data.get('title', 'Unknown')}
+Description: {parsed_data.get('description', '')}
+
+Key Features:
+{chr(10).join(f"- {feature}" for feature in parsed_data.get('features', [])[:5])}
+
+Installation: {parsed_data.get('installation', 'See README for installation instructions')}
+            """.strip(),
+            'summary': f"Project: {parsed_data.get('title', 'Unknown')} - {parsed_data.get('description', '')[:200]}...",
+            'metadata': {
+                'node_type': 'project_overview',
+                'project_name': parsed_data.get('title', 'Unknown'),
+                'project_type': 'documentation'
+            }
+        }
+    
+    def _create_feature_chunk(self, feature: str, file_path: str) -> Dict[str, Any]:
+        """Create a feature-specific chunk"""
+        return {
+            'id': self._generate_chunk_id(file_path, f'feature_{feature[:20]}', 'documentation'),
+            'type': 'feature',
+            'file_path': file_path,
+            'language': 'markdown',
+            'name': f'Feature: {feature[:50]}',
+            'content': f"Feature: {feature}",
+            'summary': f"Feature: {feature}",
+            'metadata': {
+                'node_type': 'feature',
+                'feature_description': feature
+            }
+        }
+    
+    def _create_description_chunk(self, parsed_data: Dict[str, Any], file_path: str) -> Dict[str, Any]:
+        """Create a project description chunk"""
+        return {
+            'id': self._generate_chunk_id(file_path, 'project_description', 'documentation'),
+            'type': 'project_description',
+            'file_path': file_path,
+            'language': 'markdown',
+            'name': 'Project Description',
+            'content': parsed_data.get('description', ''),
+            'summary': f"Project Description: {parsed_data.get('description', '')[:200]}...",
+            'metadata': {
+                'node_type': 'project_description',
+                'description': parsed_data.get('description', '')
+            }
+        }
+    
+    def _create_package_json_chunk(self, parsed_data: Dict[str, Any], file_path: str) -> Dict[str, Any]:
+        """Create Node.js project metadata chunks"""
+        return {
+            'id': self._generate_chunk_id(file_path, 'node_project', 'configuration'),
+            'type': 'project_metadata',
+            'file_path': file_path,
+            'language': 'json',
+            'name': f"Node.js Project: {parsed_data.get('name', '')}",
+            'content': f"""
+Project: {parsed_data.get('name', 'Unknown')}
+Description: {parsed_data.get('description', '')}
+Version: {parsed_data.get('version', '')}
+Main Entry: {parsed_data.get('main', '')}
+
+Dependencies: {', '.join(parsed_data.get('dependencies', [])[:10])}
+Dev Dependencies: {', '.join(parsed_data.get('dev_dependencies', [])[:5])}
+Scripts: {', '.join(parsed_data.get('scripts', [])[:5])}
+            """.strip(),
+            'summary': f"Node.js project: {parsed_data.get('name', '')} - {parsed_data.get('description', '')}",
+            'metadata': {
+                'node_type': 'project_metadata',
+                'project_type': 'nodejs',
+                'dependencies': parsed_data.get('dependencies', []),
+                'dev_dependencies': parsed_data.get('dev_dependencies', [])
+            }
+        }
+    
+    def _create_requirements_chunk(self, parsed_data: Dict[str, Any], file_path: str) -> Dict[str, Any]:
+        """Create Python project overview"""
+        return {
+            'id': self._generate_chunk_id(file_path, 'python_project', 'configuration'),
+            'type': 'project_metadata',
+            'file_path': file_path,
+            'language': 'text',
+            'name': 'Python Project Dependencies',
+            'content': f"""
+Python project with {len(parsed_data.get('dependencies', []))} dependencies:
+{chr(10).join(f"- {dep}" for dep in parsed_data.get('dependencies', [])[:10])}
+            """.strip(),
+            'summary': f"Python project with {len(parsed_data.get('dependencies', []))} dependencies",
+            'metadata': {
+                'node_type': 'project_metadata',
+                'project_type': 'python',
+                'dependencies': parsed_data.get('dependencies', [])
+            }
+        }
+    
+    def _create_docker_chunk(self, parsed_data: Dict[str, Any], file_path: str) -> Dict[str, Any]:
+        """Create Docker deployment overview"""
+        return {
+            'id': self._generate_chunk_id(file_path, 'docker_info', 'configuration'),
+            'type': 'deployment_info',
+            'file_path': file_path,
+            'language': 'dockerfile',
+            'name': 'Docker Configuration',
+            'content': f"""
+Docker Configuration:
+Base Image: {parsed_data.get('base_image', 'Not specified')}
+Services: {', '.join(parsed_data.get('services', []))}
+            """.strip(),
+            'summary': f"Docker configuration using {parsed_data.get('base_image', 'custom setup')}",
+            'metadata': {
+                'node_type': 'deployment_info',
+                'base_image': parsed_data.get('base_image'),
+                'services': parsed_data.get('services', [])
+            }
+        }
+    
+    def _create_generic_doc_chunk(self, parsed_data: Dict[str, Any], file_path: str) -> Dict[str, Any]:
+        """Create a generic documentation chunk"""
+        return {
+            'id': self._generate_chunk_id(file_path, 'documentation', 'documentation'),
+            'type': 'documentation',
+            'file_path': file_path,
+            'language': 'text',
+            'name': parsed_data.get('file_type', 'documentation'),
+            'content': parsed_data.get('content', ''),
+            'summary': parsed_data.get('summary', f"Documentation: {os.path.basename(file_path)}"),
+            'metadata': {
+                'node_type': 'documentation',
+                'file_type': parsed_data.get('file_type', 'unknown')
+            }
+        }
     
     def _generate_chunk_id(self, file_path: str, name: str, chunk_type: str) -> str:
         """Generate a unique chunk ID"""

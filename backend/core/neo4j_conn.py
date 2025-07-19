@@ -14,7 +14,15 @@ class Neo4jConnection:
         try:
             self.driver = GraphDatabase.driver(
                 settings.neo4j_uri,
-                auth=(settings.neo4j_user, settings.neo4j_password)
+                auth=(settings.neo4j_user, settings.neo4j_password),
+                max_connection_lifetime=200,  # 200 seconds
+                max_connection_pool_size=50,  # Increase from default 100
+                connection_acquisition_timeout=60,  # 60 seconds
+                max_transaction_retry_time=30,  # 30 seconds
+                resolver=None,  # Use default resolver
+                encrypted=False,  # Set to True for production with SSL
+                trust="TRUST_ALL_CERTIFICATES",  # Allow self-signed certificates for development
+                user_agent="CompassChat/1.0"  # Custom user agent
             )
             # Test connection
             with self.driver.session(database=settings.neo4j_database) as session:
@@ -28,7 +36,7 @@ class Neo4jConnection:
         if self.driver:
             self.driver.close()
     
-    def get_session(self):
+    def get_session(self, timeout=None):
         return self.driver.session(database=settings.neo4j_database)
     
     def create_indexes(self):
@@ -39,7 +47,9 @@ class Neo4jConnection:
                 "CREATE CONSTRAINT file_path_unique IF NOT EXISTS FOR (f:File) REQUIRE f.path IS UNIQUE",
                 "CREATE CONSTRAINT function_id_unique IF NOT EXISTS FOR (fn:Function) REQUIRE fn.id IS UNIQUE",
                 "CREATE CONSTRAINT class_id_unique IF NOT EXISTS FOR (c:Class) REQUIRE c.id IS UNIQUE",
-                "CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS FOR (ch:Chunk) REQUIRE ch.id IS UNIQUE"
+                "CREATE CONSTRAINT chunk_id_unique IF NOT EXISTS FOR (ch:Chunk) REQUIRE ch.id IS UNIQUE",
+                "CREATE CONSTRAINT changelog_id_unique IF NOT EXISTS FOR (cl:Changelog) REQUIRE cl.id IS UNIQUE",
+                "CREATE CONSTRAINT repository_unique IF NOT EXISTS FOR (r:Repository) REQUIRE (r.owner, r.name) IS UNIQUE"
             ]
             
             for constraint in constraints:
@@ -76,6 +86,31 @@ class Neo4jConnection:
                 logger.info("Created full-text index for chunk content")
             except Exception as e:
                 logger.warning(f"Full-text index may already exist: {e}")
+            
+            # Create full-text search index for changelog content
+            changelog_fulltext_index_query = """
+            CREATE FULLTEXT INDEX changelog_content IF NOT EXISTS
+            FOR (cl:Changelog) ON EACH [cl.content, cl.summary]
+            """
+            try:
+                session.run(changelog_fulltext_index_query)
+                logger.info("Created full-text index for changelog content")
+            except Exception as e:
+                logger.warning(f"Changelog full-text index may already exist: {e}")
+            
+            # Create index for changelog version and date
+            changelog_indexes = [
+                "CREATE INDEX changelog_version IF NOT EXISTS FOR (cl:Changelog) ON (cl.version)",
+                "CREATE INDEX changelog_date IF NOT EXISTS FOR (cl:Changelog) ON (cl.date)",
+                "CREATE INDEX changelog_repository IF NOT EXISTS FOR (cl:Changelog) ON (cl.repository_id)"
+            ]
+            
+            for index_query in changelog_indexes:
+                try:
+                    session.run(index_query)
+                    logger.info(f"Created index: {index_query}")
+                except Exception as e:
+                    logger.warning(f"Index may already exist: {e}")
 
 
 # Global connection instance
