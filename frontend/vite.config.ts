@@ -6,7 +6,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    host: true,
+    host: '0.0.0.0',
+    allowedHosts: true,
+    // Proxy for development only - forwards /api to local backend
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
@@ -17,7 +19,9 @@ export default defineConfig({
   },
   preview: {
     port: 4173,
-    host: true,
+    host: '0.0.0.0',
+    allowedHosts: true,
+    // No proxy needed for preview/production - uses same domain
   },
   build: {
     outDir: 'dist',
