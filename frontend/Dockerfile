@@ -11,8 +11,11 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Expose port
-EXPOSE 5173
+# Build the application
+RUN npm run build
 
-# Start development server
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+# Expose port 3000 for serve
+EXPOSE 3000
+
+# Use serve to serve the built files on port 3000
+CMD ["npx", "serve", "-s", "dist", "-l", "3000"]
