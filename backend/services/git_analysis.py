@@ -37,11 +37,30 @@ class GitAnalysisService:
                          repo_path: str, 
                          since_commit: Optional[str] = None, 
                          since_date: Optional[datetime] = None,
-                         branch: str = "main") -> List[Dict[str, Any]]:
+                         branch: Optional[str] = None) -> List[Dict[str, Any]]:
         """Get commits since a specific commit or date"""
         try:
             self.repo_path = Path(repo_path)
             self.repo = git.Repo(repo_path)
+            
+            # Auto-detect the main branch if not specified
+            if not branch:
+                # Check for common main branch names
+                for branch_name in ['main', 'master', 'develop']:
+                    try:
+                        if branch_name in [b.name for b in self.repo.branches]:
+                            branch = branch_name
+                            break
+                    except:
+                        continue
+                
+                # Fallback to first available branch or HEAD
+                if not branch:
+                    branches = list(self.repo.branches)
+                    if branches:
+                        branch = branches[0].name
+                    else:
+                        branch = "HEAD"
             
             # Determine the range for commits
             if since_commit:
@@ -62,6 +81,9 @@ class GitAnalysisService:
             else:
                 log_commits = list(self.repo.iter_commits(branch, max_count=50))
                 if since_date:
+                    # Ensure timezone compatibility
+                    if since_date.tzinfo is None:
+                        since_date = since_date.replace(tzinfo=timezone.utc)
                     log_commits = [c for c in log_commits if c.committed_datetime >= since_date]
             
             for commit in log_commits:

@@ -1677,10 +1677,15 @@ class GraphService:
                         collect(DISTINCT file.language) as languages
                     """
                 
-                result = session.run(query, {
+                params = {
                     'repo_name': repo_name,
                     'repo_owner': repo_owner
-                }).single()
+                }
+                
+                if user_id:
+                    params['user_id'] = user_id
+                
+                result = session.run(query, params).single()
                 
                 if result:
                     return {
