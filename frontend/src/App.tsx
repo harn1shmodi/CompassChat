@@ -112,8 +112,7 @@ function App() {
       const repoMatch = url.match(/github\.com\/([^\/]+\/[^\/]+)/);
       const repoName = repoMatch ? repoMatch[1] : url;
       setCurrentAnalyzingRepo(repoName);
-
-      let lastStatus = '';
+      
       let isComplete = false;
 
       // Start repository analysis with auth headers
