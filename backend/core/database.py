@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, ForeignKey, JSON, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy import create_engine
@@ -112,11 +112,13 @@ class DatabaseManager:
             else:
                 self.engine = create_engine(database_url)
             
-            # Test the connection before proceeding
-            with self.engine.connect() as conn:
-                conn.execute("SELECT 1")
-            
+            # Create tables and test connection
             Base.metadata.create_all(bind=self.engine)
+            
+            # Simple connection test without raw SQL
+            with self.engine.connect() as conn:
+                pass  # Just test that we can connect
+            
             logger.info(f"✅ Database connected successfully to: {database_url.split('@')[0] if '@' in database_url else 'SQLite'}@***")
             
         except Exception as e:
