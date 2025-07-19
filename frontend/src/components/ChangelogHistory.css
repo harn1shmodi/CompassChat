@@ -154,8 +154,9 @@
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius);
-  padding: 2rem 1.5rem;
-  max-width: 300px;
+  padding: 1.5rem;
+  max-width: 280px;
+  min-width: 240px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
   animation: pulseScale 2s ease-in-out infinite;
 }
@@ -176,7 +177,7 @@
 .loading-spinner p {
   color: hsl(var(--muted-foreground));
   font-size: 0.875rem;
-  margin: 1rem 0 0 0;
+  margin: 0.75rem 0 0 0;
   animation: pulse 2s infinite;
 }
 
