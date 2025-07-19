@@ -140,9 +140,11 @@ class ChangelogGenerateRequest(BaseModel):
     since_date: Optional[datetime] = None  # Date-based comparison
     target_audience: str = "users"  # users, developers, business, mixed
     changelog_format: str = "markdown"  # markdown, json
+    custom_version: Optional[str] = None  # Custom version override
 
 
 class ChangelogResponse(BaseModel):
+    id: Optional[str]
     version: Optional[str]
     date: Optional[str]
     content: Optional[str]
@@ -202,19 +204,25 @@ async def generate_changelog(
             since_version=request.since_version,
             since_date=request.since_date,
             target_audience=request.target_audience,
-            changelog_format=request.changelog_format
+            changelog_format=request.changelog_format,
+            custom_version=request.custom_version
         )
         
         # Store the changelog if generation was successful
+        changelog_id = None
         if changelog_result.get('version') and changelog_result.get('content'):
-            stored = changelog_service.store_changelog(
+            changelog_id = changelog_service.store_changelog(
                 request.repo_owner,
                 request.repo_name,
                 changelog_result,
                 current_user.username
             )
-            if not stored:
+            if not changelog_id:
                 logger.warning(f"Failed to store changelog for {request.repo_owner}/{request.repo_name}")
+        
+        # Add the changelog ID to the result
+        if changelog_id:
+            changelog_result['id'] = changelog_id
         
         # Return the changelog result
         return ChangelogResponse(**changelog_result)
@@ -570,6 +578,50 @@ async def publish_changelog(
         raise
     except Exception as e:
         logger.error(f"Error publishing changelog: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ChangelogUpdateRequest(BaseModel):
+    content: str
+
+
+@router.put("/update/{repo_owner}/{repo_name}/{changelog_id}")
+async def update_changelog(
+    repo_owner: str,
+    repo_name: str,
+    changelog_id: str,
+    request: ChangelogUpdateRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Update the content of an existing changelog entry"""
+    try:
+        changelog_service = ChangelogService()
+        
+        # Update the changelog content
+        success = changelog_service.update_changelog(
+            repo_owner, 
+            repo_name, 
+            changelog_id,
+            request.content,
+            current_user.username
+        )
+        
+        if success:
+            return {
+                "message": f"Successfully updated changelog {changelog_id} for {repo_owner}/{repo_name}",
+                "changelog_id": changelog_id,
+                "updated": True
+            }
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Changelog {changelog_id} not found for repository {repo_owner}/{repo_name} or access denied"
+            )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating changelog: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1017,3 +1069,45 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
     """
     
     return html_content
+
+
+@router.get("/cache/stats")
+async def get_cache_stats(current_user: User = Depends(get_current_user)):
+    """Get changelog generation cache statistics"""
+    try:
+        changelog_service = ChangelogService()
+        cache_stats = changelog_service.get_cache_info()
+        
+        return {
+            "cache_statistics": cache_stats,
+            "optimization_info": {
+                "description": "File context caching reduces LLM calls for repeated file analysis",
+                "benefits": [
+                    "Faster changelog generation for files analyzed before",
+                    "Reduced OpenAI API costs",
+                    "Better performance for repositories with overlapping file changes"
+                ]
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting cache stats: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get cache statistics")
+
+
+@router.post("/cache/clear")
+async def clear_cache(repo_name: Optional[str] = None, current_user: User = Depends(get_current_user)):
+    """Clear changelog generation cache (admin function)"""
+    try:
+        changelog_service = ChangelogService()
+        
+        if repo_name:
+            changelog_service.clear_cache(repo_name)
+            return {"message": f"Cache cleared for repository: {repo_name}"}
+        else:
+            changelog_service.clear_cache()
+            return {"message": "All cache cleared successfully"}
+            
+    except Exception as e:
+        logger.error(f"Error clearing cache: {e}")
+        raise HTTPException(status_code=500, detail="Failed to clear cache")

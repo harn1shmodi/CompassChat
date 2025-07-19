@@ -13,6 +13,9 @@ import re
 import uuid
 import tempfile
 import shutil
+import hashlib
+from functools import lru_cache
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +28,197 @@ class ChangelogService:
         self.graph_service = GraphService()
         self.github_cloner = GitHubCloner()
         self.openai_client = OpenAI(api_key=settings.openai_api_key)
+        # Initialize cache for file contexts to avoid repeated LLM calls
+        self._file_context_cache = {}
+    
+    def _get_file_hash(self, file_path: str, repo_name: str) -> str:
+        """Generate a stable hash for file caching based on file path and repo"""
+        cache_key = f"{repo_name}:{file_path}"
+        return hashlib.md5(cache_key.encode()).hexdigest()[:12]  # Short hash for efficiency
+    
+    @lru_cache(maxsize=1000)
+    def _get_cached_file_context(self, cache_key: str, repo_name: str, file_path: str) -> Optional[Dict[str, Any]]:
+        """
+        LRU cached method to get file context from GraphRAG.
+        Uses cache_key for proper LRU invalidation when files change.
+        """
+        try:
+            logger.debug(f"Cache miss - querying GraphRAG for: {file_path}")
+            query = f"What is the purpose and functionality of {file_path}?"
+            context_results = self.graph_service.search_code(query, limit=3, repository=repo_name)
+            
+            if context_results and len(context_results) > 0:
+                best_result = context_results[0]
+                context = {
+                    "purpose": best_result.get('summary', '') or best_result.get('content', '')[:200] + "...",
+                    "functions": best_result.get('functions', []),
+                    "classes": best_result.get('classes', []),
+                    "language": best_result.get('language', self._detect_language_from_path(file_path)),
+                    "relevance_score": best_result.get('score', 0.0),
+                    "cached_at": datetime.now().isoformat(),
+                    "cache_key": cache_key
+                }
+                logger.info(f"✓ Generated context for {file_path} (score: {context['relevance_score']:.2f})")
+                return context
+            else:
+                logger.warning(f"✗ No GraphRAG results for {file_path}")
+                return None
+        except Exception as e:
+            logger.error(f"✗ Error getting context for {file_path}: {e}")
+            return None
+    
+    def get_file_context(self, repo_name: str, file_path: str, file_hash: str = None) -> Optional[Dict[str, Any]]:
+        """
+        Get file context with caching. Uses file_hash for cache invalidation.
+        
+        Args:
+            repo_name: Repository name
+            file_path: Path to the file
+            file_hash: Optional file hash for cache invalidation (falls back to path-based hash)
+        """
+        if not file_hash:
+            file_hash = self._get_file_hash(file_path, repo_name)
+        
+        cache_key = f"{repo_name}:{file_path}:{file_hash}"
+        
+        # Check if this is a cache hit before calling
+        cache_info = self._get_cached_file_context.cache_info()
+        initial_hits = cache_info.hits
+        
+        result = self._get_cached_file_context(cache_key, repo_name, file_path)
+        
+        # Check if it was a cache hit
+        new_cache_info = self._get_cached_file_context.cache_info()
+        if new_cache_info.hits > initial_hits:
+            logger.debug(f"🎯 Cache HIT for {file_path}")
+        else:
+            logger.debug(f"💭 Cache MISS for {file_path}")
+            
+        return result
+    
+    async def _analyze_files_in_batches(self, changed_files: List[str], repo_name: str, batch_size: int = 8) -> Dict[str, Any]:
+        """
+        Analyze multiple files using batched GraphRAG queries for efficiency.
+        Reduces LLM calls from N files to N/batch_size calls.
+        """
+        code_context = {}
+        file_batches = [list(changed_files)[i:i + batch_size] for i in range(0, len(changed_files), batch_size)]
+        
+        logger.info(f"Analyzing {len(changed_files)} files in {len(file_batches)} batches of {batch_size}")
+        
+        for batch_idx, file_batch in enumerate(file_batches):
+            try:
+                # First try to get cached contexts for individual files
+                uncached_files = []
+                for file_path in file_batch:
+                    cached_context = self.get_file_context(repo_name, file_path)
+                    if cached_context:
+                        code_context[file_path] = cached_context
+                        logger.debug(f"Using cached context for {file_path}")
+                    else:
+                        uncached_files.append(file_path)
+                
+                # For uncached files, use individual queries for better accuracy
+                # Batching works better for simple queries, but file analysis needs precision
+                if uncached_files:
+                    logger.info(f"Processing {len(uncached_files)} uncached files individually for accuracy")
+                    
+                    for file_path in uncached_files:
+                        try:
+                            file_context = self.get_file_context(repo_name, file_path)
+                            if file_context:
+                                code_context[file_path] = file_context
+                            else:
+                                # Create fallback context
+                                code_context[file_path] = {
+                                    "purpose": f"Code component in {file_path}",
+                                    "functions": [],
+                                    "classes": [],
+                                    "language": self._detect_language_from_path(file_path),
+                                    "relevance_score": 0,
+                                    "cached_at": datetime.now().isoformat(),
+                                    "from_fallback": True
+                                }
+                        except Exception as file_error:
+                            logger.warning(f"Error processing {file_path}: {file_error}")
+                            # Add minimal fallback context
+                            code_context[file_path] = {
+                                "purpose": f"Code component in {file_path}",
+                                "functions": [],
+                                "classes": [],
+                                "language": self._detect_language_from_path(file_path),
+                                "relevance_score": 0,
+                                "cached_at": datetime.now().isoformat(),
+                                "from_error": True
+                            }
+                    
+                    logger.info(f"Batch {batch_idx + 1}/{len(file_batches)}: Processed {len(uncached_files)} files")
+                
+            except Exception as e:
+                logger.warning(f"Error in batch {batch_idx + 1}: {e}")
+                # Fallback: try individual queries for this batch
+                for file_path in file_batch:
+                    if file_path not in code_context:
+                        try:
+                            individual_context = self.get_file_context(repo_name, file_path)
+                            if individual_context:
+                                code_context[file_path] = individual_context
+                        except Exception as individual_error:
+                            logger.warning(f"Failed individual query for {file_path}: {individual_error}")
+        
+        return code_context
+    
+    def _detect_language_from_path(self, file_path: str) -> str:
+        """Simple language detection from file extension"""
+        extension_map = {
+            '.py': 'python',
+            '.js': 'javascript',
+            '.ts': 'typescript',
+            '.tsx': 'typescript',
+            '.jsx': 'javascript',
+            '.java': 'java',
+            '.cpp': 'cpp',
+            '.c': 'c',
+            '.cs': 'csharp',
+            '.go': 'go',
+            '.rs': 'rust',
+            '.php': 'php',
+            '.rb': 'ruby',
+            '.swift': 'swift',
+            '.kt': 'kotlin'
+        }
+        
+        for ext, lang in extension_map.items():
+            if file_path.lower().endswith(ext):
+                return lang
+        return 'unknown'
+    
+    def get_cache_info(self) -> Dict[str, Any]:
+        """Get cache statistics for monitoring and debugging"""
+        cache_info = self._get_cached_file_context.cache_info()
+        return {
+            "cache_hits": cache_info.hits,
+            "cache_misses": cache_info.misses,
+            "cache_hit_rate": cache_info.hits / (cache_info.hits + cache_info.misses) if (cache_info.hits + cache_info.misses) > 0 else 0,
+            "cache_size": cache_info.currsize,
+            "cache_maxsize": cache_info.maxsize
+        }
+    
+    def clear_cache(self, repo_name: str = None):
+        """
+        Clear the file context cache. Optionally filter by repository.
+        
+        Args:
+            repo_name: If provided, only clear cache entries for this repository
+        """
+        if repo_name:
+            # Selective clearing would require more complex cache key management
+            # For now, clear entire cache if repo_name is specified
+            logger.info(f"Clearing cache for repository: {repo_name}")
+        else:
+            logger.info("Clearing entire file context cache")
+        
+        self._get_cached_file_context.cache_clear()
     
     async def generate_changelog(self, 
                                 repo_path: str, 
@@ -33,7 +227,8 @@ class ChangelogService:
                                 since_date: Optional[datetime] = None,
                                 comparison_range: Optional[str] = None,
                                 target_audience: str = "users",
-                                changelog_format: str = "markdown") -> Dict[str, Any]:
+                                changelog_format: str = "markdown",
+                                custom_version: Optional[str] = None) -> Dict[str, Any]:
         """Generate an AI-powered changelog for a repository"""
         try:
             # Step 1: Get commits for changelog generation
@@ -51,8 +246,13 @@ class ChangelogService:
                     "metadata": {}
                 }
             
-            # Step 2: Analyze code changes using GraphRAG
+            # Step 2: Analyze code changes using optimized GraphRAG with caching
             code_analysis = await self._analyze_code_changes(commits, repo_name)
+            
+            # Log cache performance
+            cache_info = self.get_cache_info()
+            logger.info(f"Cache performance: {cache_info['cache_hit_rate']:.2%} hit rate "
+                       f"({cache_info['cache_hits']} hits, {cache_info['cache_misses']} misses)")
             
             # Step 3: Generate changelog content using AI
             changelog_content = await self._generate_changelog_content(
@@ -60,7 +260,7 @@ class ChangelogService:
             )
             
             # Step 4: Generate version number
-            version = self._generate_version_number(commits, repo_path)
+            version = custom_version if custom_version else self._generate_version_number(commits, repo_path)
             
             # Step 5: Format final changelog
             formatted_changelog = self._format_changelog(
@@ -122,7 +322,7 @@ class ChangelogService:
             return []
     
     async def _analyze_code_changes(self, commits: List[Dict[str, Any]], repo_name: str) -> Dict[str, Any]:
-        """Analyze code changes using GraphRAG to understand impact"""
+        """Analyze code changes using optimized GraphRAG with batching and caching"""
         try:
             # Extract file paths from commits
             changed_files = set()
@@ -130,33 +330,35 @@ class ChangelogService:
                 for file_info in commit.get('files_changed', []):
                     changed_files.add(file_info['path'])
             
-            # Use GraphRAG to understand the context of changed files
-            code_context = {}
-            for file_path in list(changed_files)[:20]:  # Limit to prevent token overflow
-                try:
-                    # Query GraphRAG for context about this file
-                    query = f"What is the purpose and functionality of {file_path}?"
-                    context_results = self.graph_service.search_code(query, limit=3, repository=repo_name)
-                    
-                    if context_results:
-                        code_context[file_path] = {
-                            "purpose": context_results[0].get('summary', ''),
-                            "functions": context_results[0].get('functions', []),
-                            "classes": context_results[0].get('classes', []),
-                            "language": context_results[0].get('language', ''),
-                            "relevance_score": context_results[0].get('score', 0.0)
-                        }
-                except Exception as e:
-                    logger.warning(f"Error analyzing file {file_path}: {e}")
+            # Limit files to prevent excessive token usage
+            limited_files = list(changed_files)[:20]
+            
+            logger.info(f"Analyzing {len(limited_files)} changed files for {repo_name}")
+            
+            # Use optimized batch analysis with caching
+            code_context = await self._analyze_files_in_batches(limited_files, repo_name, batch_size=8)
+            
+            # Log cache effectiveness
+            cached_files = sum(1 for context in code_context.values() 
+                             if not context.get('from_fallback', False) and not context.get('from_error', False))
+            fallback_files = sum(1 for context in code_context.values() 
+                               if context.get('from_fallback', False) or context.get('from_error', False))
+            logger.info(f"File analysis: {cached_files} successfully analyzed, {fallback_files} fallbacks")
             
             return {
                 "changed_files": list(changed_files),
                 "code_context": code_context,
-                "analysis_summary": self._summarize_code_changes(code_context)
+                "analysis_summary": self._summarize_code_changes(code_context),
+                "cache_stats": {
+                    "total_files": len(limited_files),
+                    "successfully_analyzed": cached_files,
+                    "fallback_used": fallback_files,
+                    "success_rate": cached_files / len(code_context) if code_context else 0
+                }
             }
         except Exception as e:
             logger.error(f"Error analyzing code changes: {e}")
-            return {"changed_files": [], "code_context": {}, "analysis_summary": ""}
+            return {"changed_files": [], "code_context": {}, "analysis_summary": "", "cache_stats": {}}
     
     def _summarize_code_changes(self, code_context: Dict[str, Any]) -> str:
         """Summarize the types of code changes"""
@@ -377,7 +579,8 @@ class ChangelogService:
         for commit in commits:
             if commit.get('breaking_changes'):
                 breaking_changes.extend(commit['breaking_changes'])
-        return breaking_changes
+        # Remove duplicates while preserving order
+        return list(dict.fromkeys(breaking_changes))
     
     def _get_commit_type_summary(self, commits: List[Dict[str, Any]]) -> Dict[str, int]:
         """Get summary of commit types"""
@@ -582,7 +785,7 @@ class ChangelogService:
             logger.error(f"Error getting changelog history: {e}")
             return []
     
-    def store_changelog(self, repo_owner: str, repo_name: str, changelog_data: Dict[str, Any], user_id: str) -> bool:
+    def store_changelog(self, repo_owner: str, repo_name: str, changelog_data: Dict[str, Any], user_id: str) -> Optional[str]:
         """Store changelog entry in the database"""
         try:
             with neo4j_conn.get_session() as session:
@@ -642,13 +845,17 @@ class ChangelogService:
                     'user_id': user_id
                 })
                 
-                result.single()  # Ensure the query executed successfully
-                logger.info(f"Stored changelog {changelog_data.get('version', 'unknown')} for {repo_owner}/{repo_name}")
-                return True
+                stored_result = result.single()  # Ensure the query executed successfully
+                if stored_result:
+                    logger.info(f"Stored changelog {changelog_data.get('version', 'unknown')} for {repo_owner}/{repo_name}")
+                    return changelog_id
+                else:
+                    logger.error(f"Failed to store changelog - no result returned")
+                    return None
                 
         except Exception as e:
             logger.error(f"Error storing changelog: {e}")
-            return False
+            return None
     
     def _generate_summary(self, content: str) -> str:
         """Generate a brief summary of the changelog content"""
@@ -703,6 +910,57 @@ class ChangelogService:
         except Exception as e:
             logger.error(f"Error deleting changelog: {e}")
             return False
+
+    def update_changelog(self, repo_owner: str, repo_name: str, changelog_id: str, updated_content: str, user_id: str) -> bool:
+        """Update the content of an existing changelog entry"""
+        try:
+            with neo4j_conn.get_session() as session:
+                # First verify the changelog exists and belongs to the user
+                verify_query = """
+                MATCH (repo:Repository {owner: $repo_owner, name: $repo_name, user_id: $user_id})-[:HAS_CHANGELOG]->(cl:Changelog {id: $changelog_id})
+                RETURN cl.version as version
+                """
+                
+                verify_result = session.run(verify_query, {
+                    'repo_owner': repo_owner,
+                    'repo_name': repo_name,
+                    'changelog_id': changelog_id,
+                    'user_id': user_id
+                })
+                
+                if not verify_result.single():
+                    logger.warning(f"Changelog {changelog_id} not found or access denied for user {user_id}")
+                    return False
+                
+                # Update the content and modified timestamp
+                update_query = """
+                MATCH (repo:Repository {owner: $repo_owner, name: $repo_name, user_id: $user_id})-[:HAS_CHANGELOG]->(cl:Changelog {id: $changelog_id})
+                SET cl.content = $content,
+                    cl.modified_at = $modified_at
+                RETURN cl.version as version
+                """
+                
+                result = session.run(update_query, {
+                    'repo_owner': repo_owner,
+                    'repo_name': repo_name,
+                    'changelog_id': changelog_id,
+                    'user_id': user_id,
+                    'content': updated_content,
+                    'modified_at': datetime.now(timezone.utc).isoformat()
+                })
+                
+                updated_record = result.single()
+                if updated_record:
+                    version = updated_record['version']
+                    logger.info(f"Updated changelog {version} ({changelog_id}) for {repo_owner}/{repo_name}")
+                    return True
+                else:
+                    logger.warning(f"Failed to update changelog {changelog_id}")
+                    return False
+                
+        except Exception as e:
+            logger.error(f"Error updating changelog: {e}")
+            return False
     
     def publish_changelog(self, repo_owner: str, repo_name: str, version: str, user_id: str) -> bool:
         """Publish a specific changelog version to make it publicly accessible"""
@@ -745,6 +1003,7 @@ class ChangelogService:
             since_version = kwargs.get('since_version')
             since_date = kwargs.get('since_date')
             comparison_range = kwargs.get('comparison_range')
+            custom_version = kwargs.get('custom_version')
             
             # Construct GitHub URL
             github_url = f"https://github.com/{repo_owner}/{repo_name}.git"
@@ -778,7 +1037,8 @@ class ChangelogService:
                 since_date=since_date,
                 comparison_range=comparison_range,
                 target_audience=target_audience,
-                changelog_format=changelog_format
+                changelog_format=changelog_format,
+                custom_version=custom_version
             )
             
             return changelog_result

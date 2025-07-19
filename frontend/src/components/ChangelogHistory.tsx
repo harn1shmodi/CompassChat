@@ -11,11 +11,14 @@ import {
   Loader2,
   Share2,
   Check,
-  Upload
+  Upload,
+  Edit,
+  Save
 } from 'lucide-react';
 import './ChangelogHistory.css';
 
 interface ChangelogEntry {
+  id: string;
   version: string;
   date: string;
   content: string;
@@ -32,11 +35,13 @@ interface ChangelogEntry {
 interface ChangelogHistoryProps {
   repository: string | null;
   authHeaders?: () => { [key: string]: string };
+  fetchWithAuth?: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
 export const ChangelogHistory: React.FC<ChangelogHistoryProps> = ({
   repository,
-  authHeaders
+  authHeaders,
+  fetchWithAuth
 }) => {
   const [history, setHistory] = useState<ChangelogEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -44,6 +49,8 @@ export const ChangelogHistory: React.FC<ChangelogHistoryProps> = ({
   const [selectedEntry, setSelectedEntry] = useState<ChangelogEntry | null>(null);
   const [publishingVersions, setPublishingVersions] = useState<Set<string>>(new Set());
   const [publishMessage, setPublishMessage] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState('');
 
   useEffect(() => {
     if (repository) {
@@ -89,6 +96,66 @@ export const ChangelogHistory: React.FC<ChangelogHistoryProps> = ({
     } catch {
       return dateString;
     }
+  };
+
+  const startEditing = () => {
+    if (!selectedEntry) return;
+    setEditedContent(selectedEntry.content);
+    setIsEditing(true);
+  };
+
+  const saveEdits = async () => {
+    if (!selectedEntry || !repository) return;
+
+    try {
+      const [repoOwner, repoName] = repository.split('/');
+      
+      const response = fetchWithAuth 
+        ? await fetchWithAuth(`/api/changelog/update/${repoOwner}/${repoName}/${selectedEntry.id}`, {
+            method: 'PUT',
+            body: JSON.stringify({ content: editedContent })
+          })
+        : await fetch(`/api/changelog/update/${repoOwner}/${repoName}/${selectedEntry.id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              ...authHeaders ? authHeaders() : {}
+            },
+            body: JSON.stringify({ content: editedContent })
+          });
+
+      if (response.ok) {
+        // Update local state with the new content
+        setSelectedEntry({
+          ...selectedEntry,
+          content: editedContent
+        });
+        
+        // Also update the history list
+        setHistory(prevHistory => 
+          prevHistory.map(entry => 
+            entry.id === selectedEntry.id 
+              ? { ...entry, content: editedContent }
+              : entry
+          )
+        );
+        
+        setIsEditing(false);
+        console.log('Changelog updated successfully');
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to update changelog:', errorData);
+        // Could show an error toast here
+      }
+    } catch (error) {
+      console.error('Error updating changelog:', error);
+      // Could show an error toast here
+    }
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setEditedContent('');
   };
 
   const getVersionColor = (version: string): string => {
@@ -316,12 +383,46 @@ export const ChangelogHistory: React.FC<ChangelogHistoryProps> = ({
                     </span>
                     {formatDate(selectedEntry.date)}
                   </h3>
-                  <button
-                    onClick={() => setSelectedEntry(null)}
-                    className="btn btn-outline btn-sm"
-                  >
-                    <X size={16} /> Close
-                  </button>
+                  <div className="details-actions">
+                    {isEditing ? (
+                      <>
+                        <button
+                          onClick={saveEdits}
+                          className="btn btn-primary btn-sm"
+                          title="Save changes"
+                        >
+                          <Save size={16} /> Save
+                        </button>
+                        <button
+                          onClick={cancelEditing}
+                          className="btn btn-outline btn-sm"
+                          title="Cancel editing"
+                        >
+                          <X size={16} /> Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          onClick={startEditing}
+                          className="btn btn-outline btn-sm"
+                          title="Edit changelog"
+                        >
+                          <Edit size={16} /> Edit
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedEntry(null);
+                            setIsEditing(false);
+                            setEditedContent('');
+                          }}
+                          className="btn btn-outline btn-sm"
+                        >
+                          <X size={16} /> Close
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 <div className="details-metadata">
@@ -367,13 +468,25 @@ export const ChangelogHistory: React.FC<ChangelogHistoryProps> = ({
 
                 <div className="details-content">
                   <h4><FileText size={16} /> Content</h4>
-                  <div className="content-container">
-                    {selectedEntry.format === 'markdown' ? (
-                      <MarkdownRenderer content={selectedEntry.content} />
-                    ) : (
-                      <pre className="content-raw">{selectedEntry.content}</pre>
-                    )}
-                  </div>
+                  {isEditing ? (
+                    <div className="content-editor">
+                      <textarea
+                        value={editedContent}
+                        onChange={(e) => setEditedContent(e.target.value)}
+                        className="content-textarea"
+                        rows={20}
+                        placeholder="Edit your changelog content..."
+                      />
+                    </div>
+                  ) : (
+                    <div className="content-container">
+                      {selectedEntry.format === 'markdown' ? (
+                        <MarkdownRenderer content={selectedEntry.content} />
+                      ) : (
+                        <pre className="content-raw">{selectedEntry.content}</pre>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

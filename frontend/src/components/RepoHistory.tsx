@@ -11,14 +11,12 @@ interface Repository {
 }
 
 interface RepoHistoryProps {
-  authHeaders: () => { [key: string]: string };
   fetchWithAuth: (url: string, options?: RequestInit) => Promise<Response>;
   onSelectRepository: (repoName: string) => void;
   onClose: () => void;
 }
 
 export const RepoHistory: React.FC<RepoHistoryProps> = ({
-  authHeaders,
   fetchWithAuth,
   onSelectRepository,
   onClose

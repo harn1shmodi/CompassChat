@@ -7,7 +7,10 @@ import {
   Download, 
   BarChart3, 
   Users, 
-  FileText
+  FileText,
+  Edit,
+  Save,
+  X
 } from 'lucide-react';
 import './ChangelogGenerator.css';
 
@@ -29,6 +32,7 @@ interface ChangelogTemplate {
 }
 
 interface ChangelogResult {
+  id?: string;
   version: string;
   date: string;
   content: string;
@@ -68,7 +72,10 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
   const [selectedFormat, setSelectedFormat] = useState('markdown');
   const [sinceVersion, setSinceVersion] = useState('');
   const [sinceDate, setSinceDate] = useState('');
+  const [customVersion, setCustomVersion] = useState('');
   const [isPreview, setIsPreview] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState('');
 
   // Load templates on component mount
   useEffect(() => {
@@ -110,7 +117,8 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
         since_version: sinceVersion || null,
         since_date: sinceDate || null,
         target_audience: selectedAudience,
-        changelog_format: selectedFormat
+        changelog_format: selectedFormat,
+        custom_version: customVersion || null
       };
 
       const endpoint = isPreview ? '/api/changelog/preview' : '/api/changelog/generate';
@@ -154,7 +162,8 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
     const extension = templates?.formats[selectedFormat]?.extension || '.txt';
     const fileName = `changelog-${changelog.version}${extension}`;
     
-    const blob = new Blob([changelog.content], { type: 'text/plain' });
+    const content = isEditing ? editedContent : changelog.content;
+    const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -165,10 +174,71 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  const startEditing = () => {
+    if (!changelog) return;
+    setEditedContent(changelog.content);
+    setIsEditing(true);
+  };
+
+  const saveEdits = async () => {
+    if (!changelog || !repository) return;
+
+    // If we have an ID, this changelog is stored in the database and we can update it
+    if (changelog.id) {
+      try {
+        const [repoOwner, repoName] = repository.split('/');
+        
+        const response = fetchWithAuth 
+          ? await fetchWithAuth(`/api/changelog/update/${repoOwner}/${repoName}/${changelog.id}`, {
+              method: 'PUT',
+              body: JSON.stringify({ content: editedContent })
+            })
+          : await fetch(`/api/changelog/update/${repoOwner}/${repoName}/${changelog.id}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                ...authHeaders ? authHeaders() : {}
+              },
+              body: JSON.stringify({ content: editedContent })
+            });
+
+        if (response.ok) {
+          // Update local state with the new content
+          setChangelog({
+            ...changelog,
+            content: editedContent
+          });
+          setIsEditing(false);
+          console.log('Changelog updated successfully');
+        } else {
+          const errorData = await response.json();
+          console.error('Failed to update changelog:', errorData);
+          // Could show an error toast here
+        }
+      } catch (error) {
+        console.error('Error updating changelog:', error);
+        // Could show an error toast here
+      }
+    } else {
+      // No ID means this is a preview or unsaved changelog, just update locally
+      setChangelog({
+        ...changelog,
+        content: editedContent
+      });
+      setIsEditing(false);
+    }
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setEditedContent('');
+  };
+
   const copyToClipboard = () => {
     if (!changelog) return;
 
-    navigator.clipboard.writeText(changelog.content).then(() => {
+    const content = isEditing ? editedContent : changelog.content;
+    navigator.clipboard.writeText(content).then(() => {
       // Could show a toast notification here
       console.log('Changelog copied to clipboard');
     }).catch(err => {
@@ -274,6 +344,23 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
               </div>
             </div>
 
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="customVersion">New Version (Optional)</label>
+                <input
+                  type="text"
+                  id="customVersion"
+                  value={customVersion}
+                  onChange={(e) => setCustomVersion(e.target.value)}
+                  placeholder="e.g., v2.1.0"
+                  className="form-input"
+                />
+                <p className="form-help">
+                  Override auto-generated version number
+                </p>
+              </div>
+            </div>
+
             <div className="form-actions">
               <button
                 onClick={() => { setIsPreview(true); generateChangelog(); }}
@@ -321,20 +408,48 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
                 {changelog.version}
               </h3>
               <div className="result-actions">
-                <button
-                  onClick={copyToClipboard}
-                  className="btn btn-sm btn-outline"
-                  title="Copy to clipboard"
-                >
-                  <Copy size={16} /> Copy
-                </button>
-                <button
-                  onClick={downloadChangelog}
-                  className="btn btn-sm btn-outline"
-                  title="Download file"
-                >
-                  <Download size={16} /> Download
-                </button>
+                {isEditing ? (
+                  <>
+                    <button
+                      onClick={saveEdits}
+                      className="btn btn-sm btn-primary"
+                      title="Save changes"
+                    >
+                      <Save size={16} /> Save
+                    </button>
+                    <button
+                      onClick={cancelEditing}
+                      className="btn btn-sm btn-outline"
+                      title="Cancel editing"
+                    >
+                      <X size={16} /> Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={startEditing}
+                      className="btn btn-sm btn-outline"
+                      title="Edit changelog"
+                    >
+                      <Edit size={16} /> Edit
+                    </button>
+                    <button
+                      onClick={copyToClipboard}
+                      className="btn btn-sm btn-outline"
+                      title="Copy to clipboard"
+                    >
+                      <Copy size={16} /> Copy
+                    </button>
+                    <button
+                      onClick={downloadChangelog}
+                      className="btn btn-sm btn-outline"
+                      title="Download file"
+                    >
+                      <Download size={16} /> Download
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
@@ -394,13 +509,25 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
 
             <div className="changelog-content-container">
               <h4><FileText size={16} /> Changelog Content</h4>
-              <div className="changelog-preview">
-                {changelog.format === 'markdown' ? (
-                  <MarkdownRenderer content={changelog.content} />
-                ) : (
-                  <pre className="changelog-raw">{changelog.content}</pre>
-                )}
-              </div>
+              {isEditing ? (
+                <div className="changelog-editor">
+                  <textarea
+                    value={editedContent}
+                    onChange={(e) => setEditedContent(e.target.value)}
+                    className="changelog-textarea"
+                    rows={20}
+                    placeholder="Edit your changelog content..."
+                  />
+                </div>
+              ) : (
+                <div className="changelog-preview">
+                  {changelog.format === 'markdown' ? (
+                    <MarkdownRenderer content={changelog.content} />
+                  ) : (
+                    <pre className="changelog-raw">{changelog.content}</pre>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

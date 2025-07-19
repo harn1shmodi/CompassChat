@@ -990,3 +990,33 @@
     padding: 0.75rem;
   }
 }
+
+/* Editor styles for history */
+.content-editor {
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  background: hsl(var(--background));
+}
+
+.content-textarea {
+  width: 100%;
+  padding: 1rem;
+  border: none;
+  background: transparent;
+  color: hsl(var(--foreground));
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Monaco, Menlo, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+}
+
+.content-textarea:focus {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.details-actions {
+  display: flex;
+  gap: 0.5rem;
+}

@@ -393,7 +393,6 @@ function App() {
       {/* Repository History Modal */}
       {showRepoHistory && (
         <RepoHistory
-          authHeaders={getAuthHeaders}
           fetchWithAuth={fetchWithAuth}
           onSelectRepository={handleSelectRepository}
           onClose={() => setShowRepoHistory(false)}
