@@ -57,6 +57,13 @@ interface ChangelogGeneratorProps {
   fetchWithAuth?: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
+interface GenerationProgress {
+  status: 'starting' | 'cloning' | 'analyzing' | 'generating' | 'complete' | 'error';
+  message: string;
+  progress?: number;
+  estimated_time?: string;
+}
+
 export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
   repository,
   authHeaders,
@@ -66,6 +73,10 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [changelog, setChangelog] = useState<ChangelogResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [generationProgress, setGenerationProgress] = useState<GenerationProgress | null>(null);
+  const [generationStartTime, setGenerationStartTime] = useState<number | null>(null);
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<string | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
 
   // Form state
   const [selectedAudience, setSelectedAudience] = useState('users');
@@ -107,6 +118,9 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
     setIsGenerating(true);
     setError(null);
     setChangelog(null);
+    setGenerationProgress({ status: 'starting', message: 'Initializing changelog generation...' });
+    setGenerationStartTime(Date.now());
+    setEstimatedTimeRemaining(null);
 
     try {
       const [repoOwner, repoName] = repository.split('/');
@@ -123,10 +137,24 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
 
       const endpoint = isPreview ? '/api/changelog/preview' : '/api/changelog/generate';
       
+      // Create AbortController for timeout handling
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => {
+        abortController.abort();
+      }, 600000); // 10 minutes timeout
+
+      // Start progress tracking
+      const progressInterval = setInterval(() => {
+        updateProgressEstimate();
+      }, 2000);
+
+      setGenerationProgress({ status: 'cloning', message: 'Cloning repository...' });
+      
       const response = fetchWithAuth 
         ? await fetchWithAuth(endpoint, {
             method: 'POST',
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify(requestBody),
+            signal: abortController.signal
           })
         : await fetch(endpoint, {
             method: 'POST',
@@ -134,26 +162,166 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
               'Content-Type': 'application/json',
               ...(authHeaders ? authHeaders() : {})
             },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify(requestBody),
+            signal: abortController.signal
           });
 
+      clearTimeout(timeoutId);
+      clearInterval(progressInterval);
+
       if (response.ok) {
+        setGenerationProgress({ status: 'complete', message: 'Changelog generated successfully!' });
         const result = await response.json();
         if (result.error) {
           setError(result.error);
+          setGenerationProgress({ status: 'error', message: result.error });
         } else {
           setChangelog(result);
         }
       } else {
-        const errorData = await response.json();
-        setError(errorData.detail || 'Failed to generate changelog');
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        const errorMessage = errorData.detail || 'Failed to generate changelog';
+        setError(errorMessage);
+        setGenerationProgress({ status: 'error', message: errorMessage });
       }
     } catch (error) {
       console.error('Error generating changelog:', error);
-      setError('An error occurred while generating the changelog');
+      
+      if (error instanceof Error && error.name === 'AbortError') {
+        const timeoutMessage = 'Request timed out, but the server may still be processing. Checking for completion...';
+        setError(null); // Clear error initially
+        setGenerationProgress({ status: 'error', message: timeoutMessage });
+        
+        // Start polling for completion
+        startPollingForCompletion();
+      } else {
+        const errorMessage = 'An error occurred while generating the changelog';
+        setError(errorMessage);
+        setGenerationProgress({ status: 'error', message: errorMessage });
+      }
     } finally {
       setIsGenerating(false);
+      // Clear progress after a delay to show completion/error state
+      setTimeout(() => {
+        setGenerationProgress(null);
+        setGenerationStartTime(null);
+        setEstimatedTimeRemaining(null);
+      }, 3000);
     }
+  };
+
+  const updateProgressEstimate = () => {
+    if (!generationStartTime || !isGenerating) return;
+    
+    const elapsed = Date.now() - generationStartTime;
+    const elapsedMinutes = Math.floor(elapsed / 60000);
+    const elapsedSeconds = Math.floor((elapsed % 60000) / 1000);
+    
+    // Update progress stages based on elapsed time
+    if (elapsed < 30000) {
+      setGenerationProgress(prev => prev ? { ...prev, status: 'cloning', message: 'Cloning repository...' } : null);
+    } else if (elapsed < 120000) {
+      setGenerationProgress(prev => prev ? { ...prev, status: 'analyzing', message: 'Analyzing code changes and commit history...' } : null);
+    } else {
+      setGenerationProgress(prev => prev ? { ...prev, status: 'generating', message: 'Generating changelog content with AI...' } : null);
+    }
+    
+    // Estimate remaining time (rough estimates based on typical generation times)
+    if (elapsed < 60000) {
+      setEstimatedTimeRemaining('2-4 minutes remaining');
+    } else if (elapsed < 180000) {
+      setEstimatedTimeRemaining('1-2 minutes remaining');
+    } else if (elapsed < 300000) {
+      setEstimatedTimeRemaining('Less than 1 minute remaining');
+    } else {
+      setEstimatedTimeRemaining('Finalizing...');
+    }
+  };
+
+  const startPollingForCompletion = async () => {
+    if (!repository || isPolling) return;
+    
+    setIsPolling(true);
+    setGenerationProgress({ status: 'generating', message: 'Server is still processing. Checking for completion...' });
+    
+    const [repoOwner, repoName] = repository.split('/');
+    const pollInterval = 5000; // Poll every 5 seconds
+    const maxPolls = 24; // Poll for up to 2 minutes (24 * 5s = 120s)
+    let pollCount = 0;
+    
+    const poll = async () => {
+      try {
+        // Check changelog history for recent completion
+        const historyResponse = fetchWithAuth 
+          ? await fetchWithAuth(`/api/changelog/history/${repoOwner}/${repoName}?limit=1`)
+          : await fetch(`/api/changelog/history/${repoOwner}/${repoName}?limit=1`, {
+              headers: authHeaders ? authHeaders() : {}
+            });
+        
+        if (historyResponse.ok) {
+          const historyData = await historyResponse.json();
+          const recentChangelogs = historyData.changelogs || [];
+          
+          if (recentChangelogs.length > 0) {
+            const latestChangelog = recentChangelogs[0];
+            const changelogTime = new Date(latestChangelog.created_at).getTime();
+            const generationTime = generationStartTime || Date.now();
+            
+            // If the latest changelog was created after we started generation (within 30 seconds buffer)
+            if (changelogTime > generationTime - 30000) {
+              setChangelog({
+                id: latestChangelog.id,
+                version: latestChangelog.version,
+                date: latestChangelog.created_at,
+                content: latestChangelog.content,
+                commits_analyzed: latestChangelog.commits_analyzed || 0,
+                target_audience: latestChangelog.target_audience,
+                format: latestChangelog.format,
+                metadata: latestChangelog.metadata || { breaking_changes: [], commit_types: {}, contributors: [] }
+              });
+              
+              setGenerationProgress({ status: 'complete', message: 'Changelog found! Generation completed successfully.' });
+              setIsPolling(false);
+              setIsGenerating(false);
+              
+              // Clear progress after showing success
+              setTimeout(() => {
+                setGenerationProgress(null);
+                setGenerationStartTime(null);
+                setEstimatedTimeRemaining(null);
+              }, 3000);
+              
+              return; // Stop polling
+            }
+          }
+        }
+        
+        pollCount++;
+        if (pollCount >= maxPolls) {
+          // Polling timeout
+          setError('Server is taking longer than expected. Please check the changelog history tab in a few minutes.');
+          setGenerationProgress({ status: 'error', message: 'Polling timed out. Check changelog history later.' });
+          setIsPolling(false);
+        } else {
+          // Continue polling
+          setTimeout(poll, pollInterval);
+        }
+        
+      } catch (error) {
+        console.error('Polling error:', error);
+        pollCount++;
+        if (pollCount >= maxPolls) {
+          setError('Unable to check completion status. Please check the changelog history tab.');
+          setGenerationProgress({ status: 'error', message: 'Unable to verify completion.' });
+          setIsPolling(false);
+        } else {
+          setTimeout(poll, pollInterval);
+        }
+      }
+    };
+    
+    // Start polling after a short delay
+    setTimeout(poll, 2000);
   };
 
   const downloadChangelog = () => {
@@ -378,6 +546,63 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
                 {isGenerating && !isPreview ? 'Generating...' : 'Generate Changelog'}
               </button>
             </div>
+
+            {/* Progress Indicator */}
+            {isGenerating && generationProgress && (
+              <div className="generation-progress">
+                <div className="progress-content">
+                  <div className="progress-header">
+                    <h4>Generating Changelog</h4>
+                    {estimatedTimeRemaining && (
+                      <span className="time-estimate">{estimatedTimeRemaining}</span>
+                    )}
+                  </div>
+                  
+                  <div className="progress-bar-container">
+                    <div className="progress-bar">
+                      <div 
+                        className={`progress-fill progress-${generationProgress.status}`}
+                        style={{
+                          width: generationProgress.status === 'starting' ? '10%' :
+                                 generationProgress.status === 'cloning' ? '25%' :
+                                 generationProgress.status === 'analyzing' ? '60%' :
+                                 generationProgress.status === 'generating' ? '85%' :
+                                 generationProgress.status === 'complete' ? '100%' : '0%'
+                        }}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="progress-status">
+                    <span className="status-icon">
+                      {generationProgress.status === 'starting' && '🚀'}
+                      {generationProgress.status === 'cloning' && '📥'}
+                      {generationProgress.status === 'analyzing' && '🔍'}
+                      {generationProgress.status === 'generating' && (isPolling ? '🔄' : '✨')}
+                      {generationProgress.status === 'complete' && '✅'}
+                      {generationProgress.status === 'error' && '❌'}
+                    </span>
+                    <span className="status-message">{generationProgress.message}</span>
+                    {isPolling && (
+                      <span className="polling-indicator">
+                        <span className="polling-dots">⏳ Checking...</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {generationProgress.status === 'error' && !isPolling && (
+                    <div className="progress-error">
+                      <p>The server may still be working on your request in the background. You can:</p>
+                      <ul>
+                        <li>Wait a few more minutes and try refreshing the page</li>
+                        <li>Check the changelog history tab later</li>
+                        <li>Try again with a smaller date range</li>
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {templates?.audiences[selectedAudience] && (
@@ -390,12 +615,20 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
           )}
         </div>
 
-        {error && (
+        {error && !isGenerating && (
           <div className="changelog-error">
             <div className="error-icon"><AlertTriangle size={24} /></div>
             <div className="error-content">
               <h3>Error</h3>
               <p>{error}</p>
+              <div className="error-actions">
+                <button 
+                  onClick={() => setError(null)}
+                  className="btn btn-sm btn-outline"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
           </div>
         )}
