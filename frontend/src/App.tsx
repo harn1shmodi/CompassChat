@@ -73,12 +73,18 @@ function App() {
   };
 
   const handleLogout = () => {
+    // Clear user session
     setUser(null);
     setSessionToken(null);
     setRepository(null);
     setShowRepoHistory(false);
     localStorage.removeItem('session_token');
     localStorage.removeItem('user_data');
+    
+    // Clear analysis state to prevent stale progress bars
+    setIsAnalyzing(false);
+    setAnalysisProgress(null);
+    setCurrentAnalyzingRepo('');
   };
 
   const handleBackToHome = () => {
@@ -175,10 +181,6 @@ function App() {
       });
 
       if (!response.ok) {
-        if (response.status === 401) {
-          handleLogout();
-          return;
-        }
         throw new Error('Failed to start repository analysis');
       }
 
@@ -250,6 +252,9 @@ function App() {
           status: 'error',
           message: 'Analysis timed out after 15 minutes. Large repositories may require more time.'
         });
+      } else if (error instanceof Error && error.message.includes('Failed to start')) {
+        // Authentication or server error - don't show error state, let logout handle it
+        console.log('Analysis start failed, likely due to authentication issue');
       } else {
         setIsAnalyzing(false);
         setCurrentAnalyzingRepo('');

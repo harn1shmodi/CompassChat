@@ -163,11 +163,14 @@ class DatabaseManager:
             ).first()
             
             if user_session:
-                # Auto-extend session if within 7 days of expiry
-                days_until_expiry = (user_session.expires_at - datetime.utcnow()).days
+                # Auto-extend session if within 7 days of expiry (use total_seconds for precision)
+                time_until_expiry = (user_session.expires_at - datetime.utcnow()).total_seconds()
+                days_until_expiry = time_until_expiry / 86400  # 24 * 60 * 60 seconds per day
+                
                 if days_until_expiry <= 7:
                     user_session.expires_at = datetime.utcnow() + timedelta(days=30)
                     session.commit()
+                    logger.info(f"Auto-extended session for user {user_session.user.username}, {days_until_expiry:.2f} days remaining")
                 
                 return user_session.user
             return None

@@ -100,3 +100,5 @@ dmypy.json
 
 # Temporary repository clones
 /tmp/compass_chat_*
+
+compasschat.db
