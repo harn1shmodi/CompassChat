@@ -133,11 +133,13 @@ class DatabaseManager:
             session_token = secrets.token_urlsafe(32)
             expires_at = datetime.utcnow() + timedelta(days=30)  # 30 day expiry
             
-            # Deactivate old sessions (optional - keep only one active session)
+            # Mark old sessions for deactivation after grace period (prevents race conditions)
+            # Instead of immediate deactivation, set expiry to 30 seconds from now
+            grace_period_expiry = datetime.utcnow() + timedelta(seconds=30)
             session.query(UserSession).filter(
                 UserSession.user_id == user_id,
                 UserSession.is_active == True
-            ).update({"is_active": False})
+            ).update({"expires_at": grace_period_expiry})
             
             # Create new session
             user_session = UserSession(
@@ -174,6 +176,19 @@ class DatabaseManager:
                 
                 return user_session.user
             return None
+        finally:
+            session.close()
+    
+    def cleanup_expired_sessions(self):
+        """Clean up truly expired sessions (called periodically)"""
+        session = self.get_session()
+        try:
+            expired_count = session.query(UserSession).filter(
+                UserSession.expires_at < datetime.utcnow()
+            ).delete()
+            session.commit()
+            if expired_count > 0:
+                logger.info(f"Cleaned up {expired_count} expired sessions")
         finally:
             session.close()
     
