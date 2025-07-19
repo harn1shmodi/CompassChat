@@ -96,6 +96,50 @@ function App() {
     ...(sessionToken && { 'Authorization': `Bearer ${sessionToken}` }),
   });
 
+  const refreshToken = async () => {
+    try {
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSessionToken(data.session_token);
+        localStorage.setItem('session_token', data.session_token);
+        return data.session_token;
+      }
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+    }
+    return null;
+  };
+
+  const fetchWithAuth = async (url: string, options: RequestInit = {}) => {
+    const headers = { ...getAuthHeaders(), ...options.headers };
+    
+    let response = await fetch(url, { ...options, headers });
+    
+    // If 401, try to refresh token once
+    if (response.status === 401 && sessionToken) {
+      const newToken = await refreshToken();
+      if (newToken) {
+        const newHeaders = {
+          ...headers,
+          'Authorization': `Bearer ${newToken}`
+        };
+        response = await fetch(url, { ...options, headers: newHeaders });
+      }
+    }
+    
+    // If still 401, logout user
+    if (response.status === 401) {
+      handleLogout();
+    }
+    
+    return response;
+  };
+
   const handleCancelAnalysis = () => {
     setIsAnalyzing(false);
     setAnalysisProgress(null);
@@ -124,9 +168,8 @@ function App() {
       }, 900000); // 15 minutes timeout (longer than nginx 10min)
 
       // Start repository analysis with auth headers
-      const response = await fetch('/api/repos/analyze', {
+      const response = await fetchWithAuth('/api/repos/analyze', {
         method: 'POST',
-        headers: getAuthHeaders(),
         body: JSON.stringify({ url }),
         signal: abortController.signal,
       });
@@ -327,12 +370,14 @@ function App() {
                 <ChangelogGenerator 
                   repository={repository}
                   authHeaders={getAuthHeaders}
+                  fetchWithAuth={fetchWithAuth}
                 />
               )}
               {activeTab === 'history' && (
                 <ChangelogHistory 
                   repository={repository}
                   authHeaders={getAuthHeaders}
+                  fetchWithAuth={fetchWithAuth}
                 />
               )}
             </div>
@@ -344,6 +389,7 @@ function App() {
       {showRepoHistory && (
         <RepoHistory
           authHeaders={getAuthHeaders}
+          fetchWithAuth={fetchWithAuth}
           onSelectRepository={handleSelectRepository}
           onClose={() => setShowRepoHistory(false)}
         />

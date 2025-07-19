@@ -131,7 +131,7 @@ class DatabaseManager:
         try:
             # Generate session token
             session_token = secrets.token_urlsafe(32)
-            expires_at = datetime.utcnow() + timedelta(days=7)  # 7 day expiry
+            expires_at = datetime.utcnow() + timedelta(days=30)  # 30 day expiry
             
             # Deactivate old sessions (optional - keep only one active session)
             session.query(UserSession).filter(
@@ -163,10 +163,29 @@ class DatabaseManager:
             ).first()
             
             if user_session:
-                # Update last accessed
-                user_session.user.repository_analyses
+                # Auto-extend session if within 7 days of expiry
+                days_until_expiry = (user_session.expires_at - datetime.utcnow()).days
+                if days_until_expiry <= 7:
+                    user_session.expires_at = datetime.utcnow() + timedelta(days=30)
+                    session.commit()
+                
                 return user_session.user
             return None
+        finally:
+            session.close()
+    
+    def deactivate_session(self, session_token: str):
+        """Deactivate a specific session"""
+        session = self.get_session()
+        try:
+            user_session = session.query(UserSession).filter(
+                UserSession.session_token == session_token,
+                UserSession.is_active == True
+            ).first()
+            
+            if user_session:
+                user_session.is_active = False
+                session.commit()
         finally:
             session.close()
     

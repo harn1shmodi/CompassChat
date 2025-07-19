@@ -50,11 +50,13 @@ interface ChangelogResult {
 interface ChangelogGeneratorProps {
   repository: string | null;
   authHeaders?: () => { [key: string]: string };
+  fetchWithAuth?: (url: string, options?: RequestInit) => Promise<Response>;
 }
 
 export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
   repository,
-  authHeaders
+  authHeaders,
+  fetchWithAuth
 }) => {
   const [templates, setTemplates] = useState<ChangelogTemplate | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -75,9 +77,11 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
 
   const loadTemplates = async () => {
     try {
-      const response = await fetch('/api/changelog/templates', {
-        headers: authHeaders ? authHeaders() : {}
-      });
+      const response = fetchWithAuth 
+        ? await fetchWithAuth('/api/changelog/templates')
+        : await fetch('/api/changelog/templates', {
+            headers: authHeaders ? authHeaders() : {}
+          });
       
       if (response.ok) {
         const data = await response.json();
@@ -111,14 +115,19 @@ export const ChangelogGenerator: React.FC<ChangelogGeneratorProps> = ({
 
       const endpoint = isPreview ? '/api/changelog/preview' : '/api/changelog/generate';
       
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(authHeaders ? authHeaders() : {})
-        },
-        body: JSON.stringify(requestBody)
-      });
+      const response = fetchWithAuth 
+        ? await fetchWithAuth(endpoint, {
+            method: 'POST',
+            body: JSON.stringify(requestBody)
+          })
+        : await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(authHeaders ? authHeaders() : {})
+            },
+            body: JSON.stringify(requestBody)
+          });
 
       if (response.ok) {
         const result = await response.json();

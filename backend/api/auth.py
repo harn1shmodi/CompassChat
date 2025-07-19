@@ -148,12 +148,37 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         created_at=current_user.created_at.isoformat()
     )
 
+@router.post("/refresh", response_model=LoginResponse)
+async def refresh_session(current_user: User = Depends(get_current_user)):
+    """Refresh user session token"""
+    try:
+        # Create new session
+        session_token = db_manager.create_session(current_user.id)
+        
+        return LoginResponse(
+            user=UserResponse(
+                id=current_user.id,
+                username=current_user.username,
+                email=current_user.email,
+                created_at=current_user.created_at.isoformat()
+            ),
+            session_token=session_token,
+            message="Session refreshed successfully"
+        )
+        
+    except Exception as e:
+        logger.error(f"Session refresh error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Session refresh failed"
+        )
+
 @router.post("/logout")
-async def logout_user(current_user: User = Depends(get_current_user)):
+async def logout_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Logout user (deactivate session)"""
     try:
-        # Note: In a real implementation, we'd need to deactivate the specific session
-        # For now, we'll just return success since sessions expire automatically
+        session_token = credentials.credentials
+        db_manager.deactivate_session(session_token)
         return {"message": "Logout successful"}
         
     except Exception as e:
