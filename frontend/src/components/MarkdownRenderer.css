@@ -2,6 +2,37 @@
   color: hsl(var(--foreground));
   font-size: 1rem;
   line-height: 1.6;
+  animation: contentReveal 0.6s ease-out;
+  position: relative;
+}
+
+.markdown-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, transparent, hsl(var(--primary) / 0.02), transparent);
+  border-radius: var(--radius);
+  pointer-events: none;
+  animation: backgroundShimmer 4s ease-in-out infinite;
+}
+
+@keyframes contentReveal {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes backgroundShimmer {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 0.5; }
 }
 
 .markdown-content h1,
@@ -13,6 +44,44 @@
   color: hsl(var(--foreground));
   margin: 1.5rem 0 0.75rem 0;
   font-weight: 600;
+  position: relative;
+  animation: headerSlideIn 0.5s ease-out var(--header-delay, 0s) both;
+}
+
+.markdown-content h1 { --header-delay: 0.1s; }
+.markdown-content h2 { --header-delay: 0.2s; }
+.markdown-content h3 { --header-delay: 0.3s; }
+.markdown-content h4 { --header-delay: 0.4s; }
+.markdown-content h5 { --header-delay: 0.5s; }
+.markdown-content h6 { --header-delay: 0.6s; }
+
+.markdown-content h1::after,
+.markdown-content h2::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / 0.3));
+  animation: underlineGrow 0.8s ease-out 0.8s both;
+}
+
+@keyframes headerSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes underlineGrow {
+  to {
+    width: 80px;
+  }
 }
 
 .markdown-content h1 { font-size: 1.5rem; }
@@ -23,44 +92,157 @@
 .markdown-content h6 { font-size: 0.75rem; }
 
 .markdown-content p {
-  margin: 0.75rem 0;
+  margin: 0.5rem 0;
   color: hsl(var(--foreground));
+  animation: paragraphFadeIn 0.4s ease-out var(--para-delay, 0s) both;
+}
+
+.markdown-content p:nth-of-type(1) { --para-delay: 0.2s; }
+.markdown-content p:nth-of-type(2) { --para-delay: 0.3s; }
+.markdown-content p:nth-of-type(3) { --para-delay: 0.4s; }
+.markdown-content p:nth-of-type(4) { --para-delay: 0.5s; }
+.markdown-content p:nth-of-type(n+5) { --para-delay: 0.6s; }
+
+@keyframes paragraphFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.markdown-content p:first-child {
+  margin-top: 0;
+}
+
+.markdown-content p:last-child {
+  margin-bottom: 0;
 }
 
 .markdown-content ul,
 .markdown-content ol {
-  margin: 0.75rem 0;
+  margin: 0.5rem 0;
   padding-left: 1.5rem;
   color: hsl(var(--foreground));
+  animation: listSlideIn 0.5s ease-out 0.4s both;
+}
+
+@keyframes listSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-15px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .markdown-content li {
-  margin: 0.25rem 0;
+  margin: 0.125rem 0;
+  line-height: 1.5;
+  position: relative;
+  animation: listItemFadeIn 0.3s ease-out var(--item-delay, 0s) both;
+  transition: all 0.2s ease;
+}
+
+.markdown-content li:nth-child(1) { --item-delay: 0.5s; }
+.markdown-content li:nth-child(2) { --item-delay: 0.6s; }
+.markdown-content li:nth-child(3) { --item-delay: 0.7s; }
+.markdown-content li:nth-child(4) { --item-delay: 0.8s; }
+.markdown-content li:nth-child(n+5) { --item-delay: 0.9s; }
+
+.markdown-content li:hover {
+  color: hsl(var(--primary));
+  transform: translateX(4px);
+}
+
+@keyframes listItemFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .markdown-content blockquote {
-  border-left: 4px solid hsl(var(--border));
+  border-left: 4px solid hsl(var(--primary));
   padding-left: 1rem;
   margin: 1rem 0;
   color: hsl(var(--muted-foreground));
   font-style: italic;
-  background: hsl(var(--muted) / 0.5);
+  background: linear-gradient(135deg, hsl(var(--muted) / 0.5), hsl(var(--muted) / 0.3));
   border-radius: 0 var(--radius) var(--radius) 0;
   padding: 0.75rem 0 0.75rem 1rem;
+  position: relative;
+  animation: blockquoteSlideIn 0.6s ease-out 0.3s both;
+  transition: all 0.3s ease;
+}
+
+.markdown-content blockquote::before {
+  content: '\201C';
+  position: absolute;
+  top: -5px;
+  left: 10px;
+  font-size: 3rem;
+  color: hsl(var(--primary) / 0.3);
+  font-family: Georgia, serif;
+}
+
+.markdown-content blockquote:hover {
+  transform: translateX(4px);
+  border-left-color: hsl(var(--primary) / 0.8);
+}
+
+@keyframes blockquoteSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .markdown-content code {
-  background: hsl(var(--muted));
+  background: linear-gradient(135deg, hsl(var(--muted)), hsl(var(--muted) / 0.8));
   padding: 0.125rem 0.375rem;
   border-radius: calc(var(--radius) - 2px);
   font-family: var(--font-mono);
   font-size: 0.8125rem;
-  color: hsl(var(--foreground));
+  color: hsl(var(--primary));
   border: 1px solid hsl(var(--border));
+  transition: all 0.2s ease;
+  position: relative;
+  animation: codeHighlight 0.3s ease-out var(--code-delay, 0s) both;
+}
+
+.markdown-content code:hover {
+  background: hsl(var(--primary) / 0.1);
+  border-color: hsl(var(--primary) / 0.5);
+  transform: scale(1.05);
+}
+
+@keyframes codeHighlight {
+  from {
+    opacity: 0;
+    background: hsl(var(--primary) / 0.2);
+  }
+  to {
+    opacity: 1;
+    background: linear-gradient(135deg, hsl(var(--muted)), hsl(var(--muted) / 0.8));
+  }
 }
 
 .markdown-content pre {
-  background: hsl(var(--muted));
+  background: linear-gradient(135deg, hsl(var(--muted)), hsl(var(--muted) / 0.9));
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius);
   padding: 1rem;
@@ -69,6 +251,31 @@
   font-family: var(--font-mono);
   font-size: 0.8125rem;
   line-height: 1.5;
+  position: relative;
+  animation: codeBlockReveal 0.6s ease-out 0.4s both;
+  backdrop-filter: blur(8px);
+}
+
+.markdown-content pre::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / 0.6));
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+@keyframes codeBlockReveal {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .markdown-content pre code {
@@ -82,21 +289,51 @@
   color: hsl(var(--primary));
   text-decoration: none;
   font-weight: 500;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.markdown-content a::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--primary) / 0.5));
+  transition: width 0.3s ease;
 }
 
 .markdown-content a:hover {
-  text-decoration: underline;
   color: hsl(var(--primary) / 0.8);
+  transform: translateY(-1px);
+}
+
+.markdown-content a:hover::after {
+  width: 100%;
 }
 
 .markdown-content table {
   width: 100%;
   border-collapse: collapse;
   margin: 1rem 0;
-  background: hsl(var(--card));
+  background: linear-gradient(135deg, hsl(var(--card)), hsl(var(--card) / 0.9));
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius);
   overflow: hidden;
+  animation: tableSlideUp 0.6s ease-out 0.5s both;
+  backdrop-filter: blur(8px);
+}
+
+@keyframes tableSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .markdown-content th,
@@ -104,6 +341,23 @@
   padding: 0.75rem;
   text-align: left;
   border-bottom: 1px solid hsl(var(--border));
+  transition: all 0.2s ease;
+  animation: cellFadeIn 0.4s ease-out var(--cell-delay, 0s) both;
+}
+
+.markdown-content td:hover {
+  background: hsl(var(--muted) / 0.3);
+}
+
+@keyframes cellFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .markdown-content th {
@@ -132,6 +386,26 @@
   height: auto;
   border-radius: var(--radius);
   border: 1px solid hsl(var(--border));
+  animation: imageZoomIn 0.6s ease-out 0.3s both;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px hsl(var(--muted) / 0.2);
+}
+
+.markdown-content img:hover {
+  transform: scale(1.02);
+  box-shadow: 0 8px 25px hsl(var(--muted) / 0.3);
+  border-color: hsl(var(--primary) / 0.5);
+}
+
+@keyframes imageZoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .markdown-content strong {

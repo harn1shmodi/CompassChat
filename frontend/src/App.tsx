@@ -171,7 +171,10 @@ function App() {
 
       timeoutId = window.setTimeout(() => {
         abortController.abort();
-      }, 900000); // 15 minutes timeout (longer than nginx 10min)
+      setAnalysisProgress({
+          status: 'error',
+          message: 'Analysis timed out after 6 minutes. Large repositories may require more time.'
+        });
 
       // Start repository analysis with auth headers
       const response = await fetchWithAuth('/api/repos/analyze', {
@@ -260,7 +263,7 @@ function App() {
         setCurrentAnalyzingRepo('');
         setAnalysisProgress({
           status: 'error',
-          message: 'Failed to analyze repository. Please try again.'
+          message: 'Taking longer than expected. If it doesn\'t show up in history, please try again.'
         });
       }
     }

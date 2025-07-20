@@ -48,8 +48,29 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content }) =
         // Inline code
         formattedText = formattedText.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
         
-        // Line breaks
+        // Lists - handle unordered lists (lines starting with - or *)
+        formattedText = formattedText.replace(/^[\s]*[-*]\s(.+)$/gm, '<li>$1</li>');
+        
+        // Wrap consecutive list items in ul tags
+        formattedText = formattedText.replace(/(<li>.*<\/li>(\n|<br \/>)*)+/g, (match) => {
+          const cleanMatch = match.replace(/<br \/>/g, '');
+          return `<ul>${cleanMatch}</ul>`;
+        });
+        
+        // Ordered lists (lines starting with numbers)
+        formattedText = formattedText.replace(/^[\s]*\d+\.\s(.+)$/gm, '<li>$1</li>');
+        
+        // Line breaks - convert double newlines to paragraphs, single newlines to br
+        formattedText = formattedText.replace(/\n\n+/g, '</p><p>');
         formattedText = formattedText.replace(/\n/g, '<br />');
+        formattedText = '<p>' + formattedText + '</p>';
+        
+        // Clean up empty paragraphs and fix nested paragraph issues
+        formattedText = formattedText.replace(/<p><\/p>/g, '');
+        formattedText = formattedText.replace(/<p><br \/>/g, '<p>');
+        formattedText = formattedText.replace(/<br \/><\/p>/g, '</p>');
+        formattedText = formattedText.replace(/<p><ul>/g, '<ul>');
+        formattedText = formattedText.replace(/<\/ul><\/p>/g, '</ul>');
         
         return (
           <div 

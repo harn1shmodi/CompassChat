@@ -21,22 +21,40 @@ class CacheService:
     def is_repository_cached(self, repo_url: str, commit_hash: str = None) -> bool:
         """Check if repository analysis is cached and valid"""
         try:
+            logger.debug(f"Checking cache for repository: {repo_url} (commit: {commit_hash})")
             repo_cache = db_manager.get_or_create_repository_cache(
                 repo_url=repo_url,
                 repo_name=self._extract_repo_name(repo_url),
                 commit_hash=commit_hash,
                 is_public=True
             )
+            logger.debug(f"Cache entry found: {repo_cache.repo_name} (total_chunks: {repo_cache.total_chunks})")
             
-            # Check if analysis exists in Neo4j
-            if self.graph_service.repository_exists(repo_cache.repo_name):
-                # Verify cache is not stale
-                if commit_hash and repo_cache.last_commit_hash == commit_hash:
-                    return True
-                elif not commit_hash:  # No commit hash provided, assume valid
-                    return True
+            # Quick check: if total_chunks is 0, repository is not properly cached
+            if repo_cache.total_chunks == 0:
+                logger.debug(f"Repository {repo_cache.repo_name} has 0 chunks, not cached")
+                return False
             
-            return False
+            # Check if analysis exists in Neo4j (with timeout protection)
+            try:
+                logger.debug(f"Checking Neo4j for repository: {repo_cache.repo_name}")
+                if self.graph_service.repository_exists(repo_cache.repo_name):
+                    # Verify cache is not stale
+                    if commit_hash and repo_cache.last_commit_hash == commit_hash:
+                        logger.debug("Repository cache is valid (commit hash matches)")
+                        return True
+                    elif not commit_hash:  # No commit hash provided, assume valid
+                        logger.debug("Repository cache is valid (no commit hash check)")
+                        return True
+                    else:
+                        logger.debug("Repository cache is stale (commit hash mismatch)")
+                        return False
+                else:
+                    logger.debug("Repository not found in Neo4j")
+                    return False
+            except Exception as graph_error:
+                logger.warning(f"Neo4j check failed, assuming not cached: {graph_error}")
+                return False
             
         except Exception as e:
             logger.error(f"Error checking repository cache: {e}")

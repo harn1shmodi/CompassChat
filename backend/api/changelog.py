@@ -635,61 +635,63 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{repo_owner}/{repo_name} Changelog</title>
         <style>
+            @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap');
+            
             :root {{
-                /* Light theme */
-                --background: 0 0% 100%;
-                --foreground: 240 10% 3.9%;
-                --card: 0 0% 100%;
-                --card-foreground: 240 10% 3.9%;
-                --popover: 0 0% 100%;
-                --popover-foreground: 240 10% 3.9%;
-                --primary: 240 5.9% 10%;
-                --primary-foreground: 0 0% 98%;
-                --secondary: 240 4.8% 95.9%;
-                --secondary-foreground: 240 5.9% 10%;
-                --muted: 240 4.8% 95.9%;
-                --muted-foreground: 240 3.8% 46.1%;
-                --accent: 240 4.8% 95.9%;
-                --accent-foreground: 240 5.9% 10%;
-                --destructive: 0 84.2% 60.2%;
-                --destructive-foreground: 0 0% 98%;
-                --border: 240 5.9% 90%;
-                --input: 240 5.9% 90%;
-                --ring: 240 10% 3.9%;
-                --chart-1: 12 76% 61%;
-                --chart-2: 173 58% 39%;
-                --chart-3: 197 37% 24%;
-                --chart-4: 43 74% 66%;
-                --chart-5: 27 87% 67%;
+                /* Light theme - matching your app's index.css */
+                --background: 0 0% 98.8235%;
+                --foreground: 0 0% 9.0196%;
+                --card: 0 0% 98.8235%;
+                --card-foreground: 0 0% 9.0196%;
+                --popover: 0 0% 98.8235%;
+                --popover-foreground: 0 0% 32.1569%;
+                --primary: 151.3274 66.8639% 66.8627%;
+                --primary-foreground: 153.3333 13.0435% 13.5294%;
+                --secondary: 0 0% 99.2157%;
+                --secondary-foreground: 0 0% 9.0196%;
+                --muted: 0 0% 92.9412%;
+                --muted-foreground: 0 0% 12.5490%;
+                --accent: 0 0% 92.9412%;
+                --accent-foreground: 0 0% 12.5490%;
+                --destructive: 9.8901 81.9820% 43.5294%;
+                --destructive-foreground: 0 100% 99.4118%;
+                --border: 0 0% 87.4510%;
+                --input: 0 0% 96.4706%;
+                --ring: 151.3274 66.8639% 66.8627%;
+                --chart-1: 151.3274 66.8639% 66.8627%;
+                --chart-2: 217.2193 91.2195% 59.8039%;
+                --chart-3: 258.3117 89.5349% 66.2745%;
+                --chart-4: 37.6923 92.1260% 50.1961%;
+                --chart-5: 160.1183 84.0796% 39.4118%;
                 --radius: 0.5rem;
             }}
             
             [data-theme="dark"] {{
-                /* Dark theme */
-                --background: 240 10% 3.9%;
-                --foreground: 0 0% 98%;
-                --card: 240 10% 3.9%;
-                --card-foreground: 0 0% 98%;
-                --popover: 240 10% 3.9%;
-                --popover-foreground: 0 0% 98%;
-                --primary: 0 0% 98%;
-                --primary-foreground: 240 5.9% 10%;
-                --secondary: 240 3.7% 15.9%;
-                --secondary-foreground: 0 0% 98%;
-                --muted: 240 3.7% 15.9%;
-                --muted-foreground: 240 5% 64.9%;
-                --accent: 240 3.7% 15.9%;
-                --accent-foreground: 0 0% 98%;
-                --destructive: 0 62.8% 30.6%;
-                --destructive-foreground: 0 0% 98%;
-                --border: 240 3.7% 15.9%;
-                --input: 240 3.7% 15.9%;
-                --ring: 240 4.9% 83.9%;
-                --chart-1: 220 70% 50%;
-                --chart-2: 160 60% 45%;
-                --chart-3: 30 80% 55%;
-                --chart-4: 280 65% 60%;
-                --chart-5: 340 75% 55%;
+                /* Dark theme - matching your app's index.css */
+                --background: 0 0% 7.0588%;
+                --foreground: 214.2857 31.8182% 91.3725%;
+                --card: 0 0% 9.0196%;
+                --card-foreground: 214.2857 31.8182% 91.3725%;
+                --popover: 0 0% 14.1176%;
+                --popover-foreground: 0 0% 66.2745%;
+                --primary: 154.8980 100.0000% 19.2157%;
+                --primary-foreground: 152.7273 19.2982% 88.8235%;
+                --secondary: 0 0% 14.1176%;
+                --secondary-foreground: 0 0% 98.0392%;
+                --muted: 0 0% 12.1569%;
+                --muted-foreground: 0 0% 63.5294%;
+                --accent: 0 0% 19.2157%;
+                --accent-foreground: 0 0% 98.0392%;
+                --destructive: 12.0000 45.0000% 45.0000%;
+                --destructive-foreground: 12.0000 12.1951% 91.9608%;
+                --border: 0 0% 16.0784%;
+                --input: 0 0% 14.1176%;
+                --ring: 141.8919 69.1589% 58.0392%;
+                --chart-1: 141.8919 69.1589% 58.0392%;
+                --chart-2: 213.1169 93.9024% 67.8431%;
+                --chart-3: 255.1351 91.7355% 76.2745%;
+                --chart-4: 43.2558 96.4126% 56.2745%;
+                --chart-5: 172.4551 66.0079% 50.3922%;
             }}
             
             * {{
@@ -697,7 +699,7 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
             }}
             
             body {{
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+                font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 line-height: 1.6;
                 color: hsl(var(--foreground));
                 background: hsl(var(--background));
@@ -705,12 +707,27 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
                 padding: 0;
                 transition: all 0.3s ease;
                 min-height: 100vh;
+                letter-spacing: 0.025em;
             }}
             
             .container {{
                 max-width: 1200px;
                 margin: 0 auto;
                 padding: 2rem;
+                animation: containerSlideIn 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+                position: relative;
+                z-index: 1;
+            }}
+            
+            @keyframes containerSlideIn {{
+                from {{
+                    opacity: 0;
+                    transform: translateY(30px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateY(0);
+                }}
             }}
             
             .header {{
@@ -722,7 +739,7 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
                 border-radius: var(--radius);
                 box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
                 position: relative;
-                overflow: hidden;
+                animation: headerSlideDown 0.6s ease-out 0.2s both;
             }}
             
             .header::before {{
@@ -731,18 +748,38 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
                 top: 0;
                 left: 0;
                 right: 0;
-                height: 4px;
-                background: linear-gradient(90deg, hsl(var(--chart-1)), hsl(var(--chart-2)), hsl(var(--chart-3)));
+                height: 3px;
+                background: hsl(var(--primary));
+            }}
+            
+            @keyframes headerSlideDown {{
+                from {{
+                    opacity: 0;
+                    transform: translateY(-20px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateY(0);
+                }}
             }}
             
             .header h1 {{
                 margin: 0 0 0.5rem 0;
                 font-size: 2.5rem;
                 font-weight: 700;
-                background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--chart-1)));
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-                background-clip: text;
+                color: hsl(var(--foreground));
+                animation: titleBounceIn 0.8s ease-out 0.4s both;
+            }}
+            
+            @keyframes titleBounceIn {{
+                from {{
+                    opacity: 0;
+                    transform: translateY(-20px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateY(0);
+                }}
             }}
             
             .header p {{
@@ -750,6 +787,20 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
                 font-size: 1.1rem;
                 color: hsl(var(--muted-foreground));
                 font-weight: 500;
+                animation: subtitleFadeIn 0.6s ease-out 0.6s both;
+                position: relative;
+                z-index: 2;
+            }}
+            
+            @keyframes subtitleFadeIn {{
+                from {{
+                    opacity: 0;
+                    transform: translateY(10px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateY(0);
+                }}
             }}
             
             .theme-toggle {{
@@ -767,6 +818,8 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
                 gap: 0.5rem;
                 font-size: 0.9rem;
                 color: hsl(var(--foreground));
+                animation: toggleSlideIn 0.5s ease-out 0.8s both;
+                z-index: 3;
             }}
             
             .theme-toggle:hover {{
@@ -775,10 +828,33 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
                 transform: translateY(-1px);
             }}
             
+            @keyframes toggleSlideIn {{
+                from {{
+                    opacity: 0;
+                    transform: translateX(20px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateX(0);
+                }}
+            }}
+            
             .changelog-entries {{
                 display: flex;
                 flex-direction: column;
                 gap: 2rem;
+                animation: entriesSlideIn 0.6s ease-out 1s both;
+            }}
+            
+            @keyframes entriesSlideIn {{
+                from {{
+                    opacity: 0;
+                    transform: translateY(20px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateY(0);
+                }}
             }}
             
             .changelog-entry {{
@@ -789,12 +865,40 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
                 box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
                 transition: all 0.3s ease;
                 position: relative;
+                animation: entrySlideUp var(--entry-delay, 1.2s) ease-out both;
+            }}
+            
+            .changelog-entry::before {{
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: 3px;
+                background: hsl(var(--primary));
+                opacity: 0;
+                transition: opacity 0.3s ease;
             }}
             
             .changelog-entry:hover {{
                 border-color: hsl(var(--primary));
                 box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
                 transform: translateY(-2px);
+            }}
+            
+            .changelog-entry:hover::before {{
+                opacity: 1;
+            }}
+            
+            @keyframes entrySlideUp {{
+                from {{
+                    opacity: 0;
+                    transform: translateY(30px) scale(0.95);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateY(0) scale(1);
+                }}
             }}
             
             .entry-header {{
@@ -807,13 +911,19 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
             }}
             
             .version-badge {{
-                background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--chart-1)));
+                background: hsl(var(--primary));
                 color: hsl(var(--primary-foreground));
                 padding: 0.5rem 1rem;
                 border-radius: var(--radius);
                 font-size: 1.1rem;
                 font-weight: 600;
                 box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                transition: all 0.3s ease;
+            }}
+            
+            .version-badge:hover {{
+                transform: scale(1.05);
+                box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
             }}
             
             .entry-date {{
@@ -825,6 +935,20 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
             .content {{
                 color: hsl(var(--foreground));
                 line-height: 1.7;
+                position: relative;
+                z-index: 1;
+                animation: contentFadeIn 0.5s ease-out 0.3s both;
+            }}
+            
+            @keyframes contentFadeIn {{
+                from {{
+                    opacity: 0;
+                    transform: translateY(10px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateY(0);
+                }}
             }}
             
             .content h1, .content h2, .content h3, .content h4, .content h5, .content h6 {{
@@ -847,7 +971,7 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
             
             .content h3 {{
                 font-size: 1.2rem;
-                color: hsl(var(--chart-2));
+                color: hsl(var(--foreground));
             }}
             
             .content p {{
@@ -864,7 +988,7 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
             }}
             
             .content strong {{
-                color: hsl(var(--primary));
+                color: hsl(var(--foreground));
                 font-weight: 600;
             }}
             
@@ -937,6 +1061,18 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
                 border-radius: var(--radius);
                 color: hsl(var(--muted-foreground));
                 box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                animation: footerSlideUp 0.6s ease-out 1.4s both;
+            }}
+            
+            @keyframes footerSlideUp {{
+                from {{
+                    opacity: 0;
+                    transform: translateY(20px);
+                }}
+                to {{
+                    opacity: 1;
+                    transform: translateY(0);
+                }}
             }}
             
             .footer p {{
@@ -998,10 +1134,13 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
                 </div>
         """
     else:
-        for entry in changelog_history:
+        for index, entry in enumerate(changelog_history):
             version = entry.get('version', 'Unknown Version')
             date = entry.get('date', 'Unknown Date')
             content = entry.get('content', 'No content available')
+            
+            # Calculate staggered animation delay
+            animation_delay = 1.2 + (index * 0.15)  # Start at 1.2s, then 0.15s apart
             
             # Parse date if it's ISO format
             try:
@@ -1017,11 +1156,7 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
             rendered_content = simple_markdown_to_html(content)
             
             html_content += f"""
-                <div class="changelog-entry">
-                    <div class="entry-header">
-                        <div class="version-badge">{html.escape(version)}</div>
-                        <div class="entry-date">{html.escape(formatted_date)}</div>
-                    </div>
+                <div class="changelog-entry" style="--entry-delay: {animation_delay}s;">
                     <div class="content">
                         {rendered_content}
                     </div>
@@ -1041,6 +1176,9 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
                 const html = document.documentElement;
                 const themeText = document.getElementById('theme-text');
                 
+                // Add transition class for smooth theme switching
+                document.body.style.transition = 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
+                
                 if (html.getAttribute('data-theme') === 'dark') {
                     html.setAttribute('data-theme', 'light');
                     themeText.textContent = 'Light Mode';
@@ -1050,6 +1188,11 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
                     themeText.textContent = 'Dark Mode';
                     localStorage.setItem('theme', 'dark');
                 }
+                
+                // Remove transition after animation
+                setTimeout(() => {
+                    document.body.style.transition = '';
+                }, 400);
             }
             
             // Load saved theme or default to dark
@@ -1063,6 +1206,73 @@ def _generate_changelog_html(repo_owner: str, repo_name: str, changelog_history:
             } else {
                 themeText.textContent = 'Dark Mode';
             }
+            
+            // Add scroll animations for better UX
+            function addScrollAnimations() {
+                const entries = document.querySelectorAll('.changelog-entry');
+                
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            entry.target.style.opacity = '1';
+                            entry.target.style.transform = 'translateY(0) scale(1)';
+                        }
+                    });
+                }, {
+                    threshold: 0.1,
+                    rootMargin: '0px 0px -50px 0px'
+                });
+                
+                entries.forEach(entry => {
+                    observer.observe(entry);
+                });
+            }
+            
+            // Add smooth scrolling for anchor links
+            function addSmoothScrolling() {
+                document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                    anchor.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        const target = document.querySelector(this.getAttribute('href'));
+                        if (target) {
+                            target.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'start'
+                            });
+                        }
+                    });
+                });
+            }
+            
+            // Enhanced theme toggle with visual feedback
+            document.querySelector('.theme-toggle')?.addEventListener('click', function() {
+                this.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    this.style.transform = '';
+                }, 150);
+            });
+            
+            // Add loading animation completion
+            document.addEventListener('DOMContentLoaded', function() {
+                // Mark page as loaded for CSS animations
+                document.body.classList.add('loaded');
+                
+                // Initialize scroll animations after page load
+                setTimeout(() => {
+                    addScrollAnimations();
+                    addSmoothScrolling();
+                }, 100);
+                
+                // Add hover effects for code blocks
+                document.querySelectorAll('pre code').forEach(code => {
+                    code.addEventListener('mouseenter', function() {
+                        this.style.transform = 'scale(1.01)';
+                    });
+                    code.addEventListener('mouseleave', function() {
+                        this.style.transform = 'scale(1)';
+                    });
+                });
+            });
         </script>
     </body>
     </html>
