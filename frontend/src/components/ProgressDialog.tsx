@@ -76,9 +76,9 @@ export const ProgressDialog: React.FC<ProgressDialogProps> = ({
           return 'chunking'; // Default fallback
         case 'summarizing':
           return 'summarizing';
-        case 'indexing':
+        case 'embedding':
           return 'indexing';
-        case 'complete':
+        case 'Granted':
           return 'complete';
         default:
           return progress.status;
