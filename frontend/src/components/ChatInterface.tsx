@@ -94,7 +94,21 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const connectWebSocket = () => {
     try {
       setConnectionStatus('connecting');
-      const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/chat/ws`;
+      
+      // In development, use the proxied WebSocket URL
+      // In production, use the same host as the current page
+      const isDevelopment = window.location.port === '5173';
+      let wsUrl;
+      
+      if (isDevelopment) {
+        // Development: Use Vite proxy to backend
+        wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/chat/ws`;
+      } else {
+        // Production: Use same host as the page
+        wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/chat/ws`;
+      }
+      
+      console.log('Connecting to WebSocket:', wsUrl);
       const websocket = new WebSocket(wsUrl);
 
       websocket.onopen = () => {

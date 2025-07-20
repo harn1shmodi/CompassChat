@@ -1589,21 +1589,23 @@ class GraphService:
                     MATCH (repo:Repository {name: $repo_name, owner: $repo_owner})
                     RETURN count(repo) > 0 as exists
                     """
+                    # Add timeout to the query
                     result = session.run(query, {
                         'repo_name': name,
                         'repo_owner': owner
-                    }).single()
+                    }, timeout=10).single()  # 10 second timeout
                 else:
                     query = """
                     MATCH (repo:Repository {name: $repo_name})
                     RETURN count(repo) > 0 as exists
                     """
-                    result = session.run(query, {'repo_name': name}).single()
+                    # Add timeout to the query
+                    result = session.run(query, {'repo_name': name}, timeout=10).single()
                 
                 return result and result['exists']
                 
         except Exception as e:
-            logger.error(f"Error checking repository existence: {e}")
+            logger.warning(f"Error checking repository existence (treating as not cached): {e}")
             return False
     
     def clear_repository(self, repo_name: str):
