@@ -13,6 +13,9 @@ interface User {
   id: number;
   username: string;
   email: string;
+  display_name?: string;
+  avatar_url?: string;
+  oauth_provider?: string;
 }
 
 interface AnalysisProgress {

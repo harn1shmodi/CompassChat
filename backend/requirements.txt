@@ -22,6 +22,10 @@ sqlalchemy
 psycopg2-binary
 passlib[bcrypt]
 python-jose[cryptography]
+# OAuth integration
+authlib
+itsdangerous
+PyJWT
 # Caching
 redis
 # Async HTTP and rate limiting

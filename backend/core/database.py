@@ -18,9 +18,15 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String(50), unique=True, index=True, nullable=False)
     email = Column(String(100), unique=True, index=True, nullable=False)
-    hashed_password = Column(String(255), nullable=False)
+    hashed_password = Column(String(255), nullable=True)  # Made nullable for OAuth users
     created_at = Column(DateTime, default=datetime.utcnow)
     is_active = Column(Boolean, default=True)
+    
+    # OAuth fields
+    oauth_provider = Column(String(50), nullable=True)  # 'google', 'github', etc.
+    oauth_provider_id = Column(String(100), nullable=True)  # Provider's user ID
+    display_name = Column(String(100), nullable=True)  # Full name from OAuth
+    avatar_url = Column(String(500), nullable=True)  # Profile picture URL
     
     # Relationships
     sessions = relationship("UserSession", back_populates="user")
@@ -351,6 +357,70 @@ class DatabaseManager:
                 }
                 for ur in user_repos
             ]
+        finally:
+            session.close()
+    
+    def create_oauth_user(self, username: str, email: str, provider: str, 
+                         provider_id: str, display_name: str = None, 
+                         avatar_url: str = None) -> User:
+        """Create a new OAuth user"""
+        session = self.get_session()
+        try:
+            # Check if user already exists
+            existing_user = session.query(User).filter(
+                (User.username == username) | (User.email == email)
+            ).first()
+            
+            if existing_user:
+                raise ValueError("User with this username or email already exists")
+            
+            # Create OAuth user (no password)
+            user = User(
+                username=username,
+                email=email,
+                oauth_provider=provider,
+                oauth_provider_id=provider_id,
+                display_name=display_name,
+                avatar_url=avatar_url,
+                hashed_password=None  # OAuth users don't need passwords
+            )
+            
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+            return user
+        finally:
+            session.close()
+    
+    def get_user_by_email(self, email: str) -> User:
+        """Get user by email address"""
+        session = self.get_session()
+        try:
+            user = session.query(User).filter(
+                User.email == email,
+                User.is_active == True
+            ).first()
+            return user
+        finally:
+            session.close()
+    
+    def update_user_oauth_info(self, user_id: int, provider: str = None, 
+                              provider_id: str = None, avatar_url: str = None,
+                              display_name: str = None):
+        """Update user's OAuth information"""
+        session = self.get_session()
+        try:
+            user = session.query(User).filter(User.id == user_id).first()
+            if user:
+                if provider:
+                    user.oauth_provider = provider
+                if provider_id:
+                    user.oauth_provider_id = provider_id
+                if avatar_url:
+                    user.avatar_url = avatar_url
+                if display_name:
+                    user.display_name = display_name
+                session.commit()
         finally:
             session.close()
 

@@ -36,8 +36,26 @@ class Settings(BaseSettings):
     redis_db: int = 0
     redis_password: str = "password"
     
-    cors_origins: List[str] = ["http://localhost:5173", "http://localhost:3000", "https://chat.gitcompass.com", "https://compasschat-5ap43.ondigitalocean.app"]
+    cors_origins: List[str] = ["http://localhost:5173", "http://localhost:3000", "https://chat.gitcompass.com", "https://compasschat-5ap43.ondigitalocean.app", "https://gitcompass.com"]
     debug: bool = False
+    
+    # OAuth and JWT Configuration
+    jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 30
+    
+    # GitCompass integration
+    gitcompass_base_url: str = os.getenv("GITCOMPASS_BASE_URL", "https://gitcompass.com")
+    gitcompass_oauth_client_id: str = os.getenv("GITCOMPASS_OAUTH_CLIENT_ID", "")
+    gitcompass_oauth_client_secret: str = os.getenv("GITCOMPASS_OAUTH_CLIENT_SECRET", "")
+    
+    # OAuth Provider Configuration (Optional - only if you want direct OAuth)
+    google_client_id: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    google_client_secret: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    github_client_id: str = os.getenv("GITHUB_CLIENT_ID", "")
+    github_client_secret: str = os.getenv("GITHUB_CLIENT_SECRET", "")
+    
+    # If you don't have these, OAuth buttons will be hidden in the frontend
     
     # Performance optimization settings
     enable_optimized_embedding: bool = True

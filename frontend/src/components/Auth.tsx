@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './Auth.css';
 
 interface User {
   id: number;
   username: string;
   email: string;
+  display_name?: string;
+  avatar_url?: string;
+  oauth_provider?: string;
 }
 
 interface AuthProps {
@@ -20,6 +23,57 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [oauthLoading, setOauthLoading] = useState(false);
+  const [oauthAvailable, setOauthAvailable] = useState({
+    google: false,
+    github: false
+  });
+
+  // Check which OAuth providers are available
+  useEffect(() => {
+    fetch('/api/auth/oauth/config')
+      .then(response => response.json())
+      .then(data => {
+        setOauthAvailable({
+          google: data.google_available || false,
+          github: data.github_available || false
+        });
+      })
+      .catch(() => {
+        // If endpoint doesn't exist, assume no OAuth available
+        setOauthAvailable({ google: false, github: false });
+      });
+  }, []);
+
+  // Check for OAuth callback token in URL params
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const provider = urlParams.get('provider');
+    
+    if (token && provider) {
+      // Clear URL params
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Validate the session token by getting user info
+      fetch('/api/auth/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.id) {
+          onLogin(data, token);
+        } else {
+          setError('Authentication failed. Please try again.');
+        }
+      })
+      .catch(() => {
+        setError('Authentication failed. Please try again.');
+      });
+    }
+  }, [onLogin]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,6 +106,34 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleOAuthLogin = async (provider: 'google' | 'github') => {
+    setOauthLoading(true);
+    setError('');
+
+    try {
+      const response = await fetch(`/api/auth/oauth/${provider}`);
+      const data = await response.json();
+
+      if (response.ok && data.auth_url) {
+        // Redirect to OAuth provider
+        window.location.href = data.auth_url;
+      } else {
+        setError(`Failed to initiate ${provider} authentication`);
+        setOauthLoading(false);
+      }
+    } catch (err) {
+      setError('Network error. Please try again.');
+      setOauthLoading(false);
+    }
+  };
+
+  const handleGitCompassLogin = () => {
+    // Redirect to GitCompass for authentication
+    const gitcompassUrl = 'https://gitcompass.com';
+    const redirectUrl = encodeURIComponent(window.location.origin);
+    window.location.href = `${gitcompassUrl}/auth/compasschat?redirect=${redirectUrl}`;
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -137,6 +219,44 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             {loading ? 'Please wait...' : (isLogin ? 'Login' : 'Register')}
           </button>
         </form>
+
+        {(oauthAvailable.google || oauthAvailable.github) && (
+          <>
+            <div className="oauth-divider">
+              <span>or</span>
+            </div>
+
+            <div className="oauth-buttons">
+              <button 
+                className="oauth-button gitcompass-button"
+                onClick={handleGitCompassLogin}
+                disabled={oauthLoading}
+              >
+                <span>Continue with GitCompass</span>
+              </button>
+              
+              {oauthAvailable.google && (
+                <button 
+                  className="oauth-button google-button"
+                  onClick={() => handleOAuthLogin('google')}
+                  disabled={oauthLoading}
+                >
+                  <span>Continue with Google</span>
+                </button>
+              )}
+              
+              {oauthAvailable.github && (
+                <button 
+                  className="oauth-button github-button"
+                  onClick={() => handleOAuthLogin('github')}
+                  disabled={oauthLoading}
+                >
+                  <span>Continue with GitHub</span>
+                </button>
+              )}
+            </div>
+          </>
+        )}
 
         <div className="auth-footer">
           <p>

@@ -176,3 +176,86 @@
 .link-button:hover {
   color: hsl(var(--primary) / 0.8);
 }
+
+/* OAuth Styles */
+.oauth-divider {
+  display: flex;
+  align-items: center;
+  margin: 1.5rem 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+}
+
+.oauth-divider::before,
+.oauth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: hsl(var(--border));
+}
+
+.oauth-divider span {
+  padding: 0 1rem;
+}
+
+.oauth-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.oauth-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.oauth-button:hover {
+  background: hsl(var(--accent));
+}
+
+.oauth-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gitcompass-button {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
+
+.gitcompass-button:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.google-button {
+  background: #4285f4;
+  color: white;
+  border-color: #4285f4;
+}
+
+.google-button:hover:not(:disabled) {
+  background: #3367d6;
+}
+
+.github-button {
+  background: #24292e;
+  color: white;
+  border-color: #24292e;
+}
+
+.github-button:hover:not(:disabled) {
+  background: #1b1f23;
+}
